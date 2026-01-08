@@ -10,10 +10,43 @@
   margin-bottom: 3rem;
 }
 
+.app-header {
+  position: relative;
+}
+
 .app-header h1 {
   font-size: 3rem;
   margin: 0;
   text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.logout-button {
+  position: absolute;
+  top: 0;
+  right: 0;
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background 0.3s, border-color 0.3s;
+}
+
+.logout-button:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.error-message {
+  background: #fee;
+  color: #c33;
+  padding: 0.75rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  border: 1px solid #fcc;
+  text-align: center;
 }
 
 .app-main {
@@ -25,11 +58,25 @@
 }
 
 .entry-form,
-.entries-list {
+.entries-list,
+.login-form {
   background: white;
   border-radius: 12px;
   padding: 2rem;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+
+.login-form {
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+.login-form h2 {
+  margin-top: 0;
+  color: #333;
+  border-bottom: 2px solid #667eea;
+  padding-bottom: 0.5rem;
+  text-align: center;
 }
 
 .entry-form h2,

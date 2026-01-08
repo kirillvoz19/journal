@@ -1,4 +1,5 @@
-import type { PagesFunction } from '@cloudflare/workers-types'
+import type { D1Database, PagesFunction } from '@cloudflare/workers-types'
+import { requireAuth } from '../middleware/auth'
 
 interface Env {
   DB: D1Database
@@ -11,7 +12,8 @@ interface JournalEntry {
   createdAt?: string
 }
 
-export const onRequestGet: PagesFunction<Env> = async (context) => {
+// @ts-ignore
+export const onRequestGet: PagesFunction<Env> = requireAuth(async (context) => {
   const { env, request } = context
   
   try {
@@ -26,9 +28,11 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       )
     }
 
-    const { results } = await env.DB.prepare(
+    const result = await env.DB.prepare(
       'SELECT * FROM entries ORDER BY createdAt DESC'
-    ).all<JournalEntry>()
+    ).all()
+    
+    const results = (result.results || []) as unknown as JournalEntry[]
 
     return new Response(JSON.stringify(results), {
       headers: { 'Content-Type': 'application/json' },
@@ -43,9 +47,10 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       }
     )
   }
-}
+})
 
-export const onRequestPost: PagesFunction<Env> = async (context) => {
+// @ts-ignore
+export const onRequestPost: PagesFunction<Env> = requireAuth(async (context) => {
   const { env, request } = context
 
   try {
@@ -59,7 +64,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       )
     }
 
-    const body = await request.json<{ title: string; content: string }>()
+    const body = (await request.json()) as { title: string; content: string }
 
     if (!body.title || !body.content) {
       return new Response(
@@ -94,4 +99,4 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       }
     )
   }
-}
+})
