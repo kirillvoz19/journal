@@ -42,19 +42,33 @@ npx wrangler d1 execute journal-db2 --remote --file=./schema.sql
 
 ### 5. Локальная разработка
 
-```bash
-# Собрать проект
-npm run build
+Для разработки нужно запустить и фронтенд, и бэкенд. Есть два способа:
 
-# Запустить локальный сервер с функциями
+**Способ 1: Запустить всё одной командой (рекомендуется)**
+```bash
+npm run dev:all
+```
+
+Эта команда запустит:
+- Vite dev сервер на `http://localhost:5173` (фронтенд)
+- Cloudflare Pages Functions на `http://localhost:8788` (бэкенд)
+
+**Способ 2: Запустить отдельно в разных терминалах**
+```bash
+# Терминал 1: Запустить бэкенд
+npm run dev:api
+
+# Терминал 2: Запустить фронтенд
 npm run dev
 ```
 
-Приложение будет доступно по адресу `http://localhost:8788`
+Приложение будет доступно по адресу `http://localhost:5173`
 
 ## 📝 Скрипты
 
-- `npm run dev` - Запуск локального сервера разработки с Cloudflare Pages Functions
+- `npm run dev` - Запуск только фронтенда (Vite dev сервер)
+- `npm run dev:api` - Запуск только бэкенда (Cloudflare Pages Functions на порту 8788)
+- `npm run dev:all` - Запуск фронтенда и бэкенда одновременно (рекомендуется для разработки)
 - `npm run build` - Сборка проекта для продакшна
 - `npm run preview` - Предпросмотр собранного проекта
 - `npm run lint` - Проверка кода линтером
@@ -135,3 +149,8 @@ journal/
 - [Cloudflare Pages Functions](https://developers.cloudflare.com/pages/platform/functions/)
 - [Cloudflare D1 Database](https://developers.cloudflare.com/d1/)
 - [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/)
+
+при создании препода и переходе в группу не подтягивается новый препод
+дата компонент не вводится
+время ставится не удобно
+нужно чтобы выводились группы, а когда проваливаешься как в журнале расписать

@@ -1,12 +1,33 @@
 import { useState, useEffect, useRef } from 'react'
-import './App.css'
+import {
+  Box,
+  Container,
+  Paper,
+  TextField,
+  Button,
+  Typography,
+  Alert,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  Tooltip,
+  Snackbar,
+} from '@mui/material'
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
+import { ThemeProvider, createTheme } from '@mui/material/styles'
+import CssBaseline from '@mui/material/CssBaseline'
+import { BelarusianText } from './components/BelarusianText'
+import { Teachers } from './components/Teachers'
+import { Groups } from './components/Groups'
 
-interface JournalEntry {
-  id?: number
-  title: string
-  content: string
-  createdAt?: string
-}
+const theme = createTheme({
+  palette: {
+    mode: 'light',
+    background: {
+      default: '#ffffff',
+    },
+  },
+})
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
@@ -15,11 +36,23 @@ function App() {
   const [password, setPassword] = useState('')
   const [loginError, setLoginError] = useState('')
   const [loginLoading, setLoginLoading] = useState(false)
+  const [snackbar, setSnackbar] = useState<{
+    open: boolean
+    message: string
+    severity: 'success' | 'error'
+  }>({
+    open: false,
+    message: '',
+    severity: 'error',
+  })
 
-  const [entries, setEntries] = useState<JournalEntry[]>([])
-  const [title, setTitle] = useState('')
-  const [content, setContent] = useState('')
-  const [loading, setLoading] = useState(false)
+  const showSnackbar = (message: string, severity: 'success' | 'error') => {
+    setSnackbar({ open: true, message, severity })
+  }
+
+  const handleCloseSnackbar = () => {
+    setSnackbar({ ...snackbar, open: false })
+  }
 
   const refreshTimerRef = useRef<number | null>(null)
 
@@ -117,7 +150,10 @@ function App() {
       })
 
       if (response.ok) {
-        const data = await response.json() as { accessToken: string; refreshToken: string }
+        const data = await response.json() as {
+          accessToken: string
+          refreshToken: string
+        }
         setAccessToken(data.accessToken)
         localStorage.setItem('accessToken', data.accessToken)
         localStorage.setItem('refreshToken', data.refreshToken)
@@ -135,7 +171,6 @@ function App() {
   const handleLogout = () => {
     setIsAuthenticated(false)
     setAccessToken(null)
-    setEntries([])
     localStorage.removeItem('accessToken')
     localStorage.removeItem('refreshToken')
     if (refreshTimerRef.current) {
@@ -159,28 +194,37 @@ function App() {
       })
 
       if (response.ok) {
-        const data = await response.json() as { accessToken: string; refreshToken: string }
+        const data = await response.json() as {
+          accessToken: string
+          refreshToken: string
+        }
         setAccessToken(data.accessToken)
         setIsAuthenticated(true)
         localStorage.setItem('accessToken', data.accessToken)
         localStorage.setItem('refreshToken', data.refreshToken)
         setUsername('')
         setPassword('')
-        fetchEntries()
       } else {
         const errorData = await response.json() as { error: string }
-        setLoginError(errorData.error || 'Invalid credentials')
+        const errorMessage = errorData.error || 'Invalid credentials'
+        setLoginError(errorMessage)
+        showSnackbar(errorMessage, 'error')
       }
     } catch (error) {
       console.error('Login error:', error)
-      setLoginError('Failed to login. Please try again.')
+      const errorMessage = 'Failed to login. Please try again.'
+      setLoginError(errorMessage)
+      showSnackbar(errorMessage, 'error')
     } finally {
       setLoginLoading(false)
     }
   }
 
   // Запрос с автоматическим обновлением токена при 401
-  const authenticatedFetch = async (url: string, options: RequestInit = {}) => {
+  const authenticatedFetch = async (
+    url: string,
+    options: RequestInit = {}
+  ) => {
     const token = localStorage.getItem('accessToken')
     if (!token) {
       handleLogout()
@@ -217,156 +261,163 @@ function App() {
     return response
   }
 
-  // Загрузка записей
-  const fetchEntries = async () => {
-    try {
-      setLoading(true)
-      const response = await authenticatedFetch('/api/entries')
-      if (response.ok) {
-        const data = await response.json() as JournalEntry[]
-        setEntries(data as JournalEntry[])
-      } else if (response.status === 401) {
-        handleLogout()
-      }
-    } catch (error) {
-      console.error('Error fetching entries:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchEntries()
-    }
-  }, [isAuthenticated])
-
-  // Создание записи
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!title.trim() || !content.trim()) return
-
-    try {
-      setLoading(true)
-      const response = await authenticatedFetch('/api/entries', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ title, content }),
-      })
-
-      if (response.ok) {
-        setTitle('')
-        setContent('')
-        fetchEntries()
-      } else if (response.status === 401) {
-        handleLogout()
-      }
-    } catch (error) {
-      console.error('Error creating entry:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
   // Форма логина
   if (!isAuthenticated) {
     return (
-      <div className="app">
-        <header className="app-header">
-          <h1>📔 Journal</h1>
-        </header>
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <Box
+          sx={{
+            minHeight: '100vh',
+            backgroundColor: '#ffffff',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Container sx={{ width: '400px' }}>
+            <Paper
+              elevation={3}
+              sx={{
+                p: 4,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 2,
+              }}
+            >
+              <Typography variant="h4" component="h1" align="center" gutterBottom>
+                <BelarusianText belarusian="Уваход" russian="Вход" />
+              </Typography>
 
-        <main className="app-main">
-          <section className="login-form">
-            <h2>Login</h2>
-            <form onSubmit={handleLogin}>
-              {loginError && <div className="error-message">{loginError}</div>}
-              <input
-                type="text"
-                placeholder="Username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="input"
-                required
-              />
-              <input
-                type="password"
-                placeholder="Password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="input"
-                required
-              />
-              <button type="submit" disabled={loginLoading} className="button">
-                {loginLoading ? 'Logging in...' : 'Login'}
-              </button>
-            </form>
-          </section>
-        </main>
-      </div>
+              {loginError && (
+                <Alert severity="error">
+                  <BelarusianText
+                    belarusian="Памылка ўваходу"
+                    russian="Ошибка входа"
+                  />
+                  : {loginError}
+                </Alert>
+              )}
+
+              <Box component="form" onSubmit={handleLogin} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <Tooltip title="Логин" arrow>
+                  <TextField
+                    label="Лагін"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    required
+                    fullWidth
+                  />
+                </Tooltip>
+                <Tooltip title="Пароль" arrow>
+                  <TextField
+                    label="Пароль"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    fullWidth
+                  />
+                </Tooltip>
+                <Button
+                  type="submit"
+                  variant="contained"
+                  disabled={loginLoading}
+                  fullWidth
+                  sx={{ mt: 2 }}
+                >
+                  {loginLoading ? (
+                    <BelarusianText
+                      belarusian="Уваход..."
+                      russian="Вход..."
+                    />
+                  ) : (
+                    <BelarusianText belarusian="Увайсці" russian="Войти" />
+                  )}
+                </Button>
+              </Box>
+            </Paper>
+          </Container>
+        </Box>
+
+        {/* Тостер для ошибок входа */}
+        <Snackbar
+          open={snackbar.open}
+          autoHideDuration={4000}
+          onClose={handleCloseSnackbar}
+          anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+        >
+          <Alert
+            onClose={handleCloseSnackbar}
+            severity={snackbar.severity}
+            variant="filled"
+            sx={{ width: '100%' }}
+          >
+            {snackbar.message}
+          </Alert>
+        </Snackbar>
+      </ThemeProvider>
     )
   }
 
   // Основное приложение
   return (
-    <div className="app">
-      <header className="app-header">
-        <h1>📔 Journal</h1>
-        <button onClick={handleLogout} className="logout-button">
-          Logout
-        </button>
-      </header>
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <Box
+        sx={{
+          minHeight: '100vh',
+          backgroundColor: '#ffffff',
+        }}
+      >
+        <Container maxWidth="lg" sx={{ py: 4 }}>
+          <Box
+            sx={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              mb: 3,
+            }}
+          >
+            <Typography variant="h4" component="h1">
+              <BelarusianText belarusian="Журнал" russian="Журнал" />
+            </Typography>
+            <Button variant="outlined" onClick={handleLogout}>
+              <BelarusianText belarusian="Выйсці" russian="Выйти" />
+            </Button>
+          </Box>
 
-      <main className="app-main">
-        <section className="entry-form">
-          <h2>New Entry</h2>
-          <form onSubmit={handleSubmit}>
-            <input
-              type="text"
-              placeholder="Title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="input"
-            />
-            <textarea
-              placeholder="Write your thoughts..."
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              className="textarea"
-              rows={6}
-            />
-            <button type="submit" disabled={loading} className="button">
-              {loading ? 'Saving...' : 'Save Entry'}
-            </button>
-          </form>
-        </section>
+          <Box>
+            <Accordion defaultExpanded={false}>
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Typography>
+                  <BelarusianText belarusian="Групы" russian="Группы" />
+                </Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <Groups authenticatedFetch={authenticatedFetch} />
+              </AccordionDetails>
+            </Accordion>
 
-        <section className="entries-list">
-          <h2>Entries</h2>
-          {loading && entries.length === 0 ? (
-            <p>Loading...</p>
-          ) : entries.length === 0 ? (
-            <p className="empty-state">No entries yet. Create your first entry!</p>
-          ) : (
-            <div className="entries">
-              {entries.map((entry) => (
-                <article key={entry.id} className="entry-card">
-                  <h3>{entry.title}</h3>
-                  <p className="entry-date">
-                    {entry.createdAt
-                      ? new Date(entry.createdAt).toLocaleDateString()
-                      : ''}
-                  </p>
-                  <p className="entry-content">{entry.content}</p>
-                </article>
-              ))}
-            </div>
-          )}
-        </section>
-      </main>
-    </div>
+            <Accordion defaultExpanded={false}>
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Typography>
+                  <BelarusianText
+                    belarusian="Выкладчыкі"
+                    russian="Преподаватели"
+                  />
+                </Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <Teachers
+                  authenticatedFetch={authenticatedFetch}
+                />
+              </AccordionDetails>
+            </Accordion>
+          </Box>
+        </Container>
+      </Box>
+    </ThemeProvider>
   )
 }
 
