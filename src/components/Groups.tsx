@@ -17,10 +17,30 @@ import {
   Alert,
   Chip,
   Typography,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
 } from '@mui/material'
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
+import { DatePicker } from '@mui/x-date-pickers/DatePicker'
+import { TimePicker } from '@mui/x-date-pickers/TimePicker'
+import dayjs, { Dayjs } from 'dayjs'
+import 'dayjs/locale/ru'
+import customParseFormat from 'dayjs/plugin/customParseFormat'
+
+// Настройка dayjs для 24-часового формата
+dayjs.extend(customParseFormat)
+dayjs.locale('ru')
 import AddIcon from '@mui/icons-material/Add'
 import EditIcon from '@mui/icons-material/Edit'
 import DeleteIcon from '@mui/icons-material/Delete'
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward'
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward'
 import { BelarusianText } from './BelarusianText'
 import { ConfirmDialog } from './ConfirmDialog'
 
@@ -48,12 +68,17 @@ interface Group {
   id?: number
   name: string
   teacherId: number
+  teacherFullName?: string
   subject: string
   customSubject?: string
   level: string
+  createdAt?: string
   schedules?: GroupSchedule[]
   students?: GroupStudent[]
 }
+
+type SortField = 'default' | 'level' | 'teacher' | 'subject' | 'name'
+type SortOrder = 'asc' | 'desc'
 
 interface GroupsProps {
   authenticatedFetch: (url: string, options?: RequestInit) => Promise<Response>
@@ -63,9 +88,17 @@ const SUBJECTS = ['Немецкий', 'Английский', 'Польский'
 const LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']
 
 export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
+  const [groups, setGroups] = useState<Group[]>([])
   const [teachers, setTeachers] = useState<Teacher[]>([])
   const [openAddDialog, setOpenAddDialog] = useState(false)
+  const [openEditDialog, setOpenEditDialog] = useState(false)
+  const [editingGroup, setEditingGroup] = useState<Group | null>(null)
   const [loading, setLoading] = useState(false)
+  const [sortField, setSortField] = useState<SortField>('default')
+  const [sortOrder, setSortOrder] = useState<SortOrder>('asc')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [groupToDelete, setGroupToDelete] = useState<Group | null>(null)
 
   // Форма группы
   const [groupName, setGroupName] = useState('')
@@ -79,9 +112,12 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
   // Модальные окна
   const [openScheduleDialog, setOpenScheduleDialog] = useState(false)
   const [editingScheduleIndex, setEditingScheduleIndex] = useState<number | null>(null)
-  const [scheduleDate, setScheduleDate] = useState('')
-  const [scheduleStartTime, setScheduleStartTime] = useState('')
-  const [scheduleEndTime, setScheduleEndTime] = useState('')
+  const [scheduleDate, setScheduleDate] = useState<Dayjs | null>(null)
+  const [scheduleStartTime, setScheduleStartTime] = useState<Dayjs | null>(null)
+  const [scheduleEndTime, setScheduleEndTime] = useState<Dayjs | null>(null)
+  const [datePickerOpen, setDatePickerOpen] = useState(false)
+  const [startTimePickerOpen, setStartTimePickerOpen] = useState(false)
+  const [endTimePickerOpen, setEndTimePickerOpen] = useState(false)
 
   const [openStudentDialog, setOpenStudentDialog] = useState(false)
   const [editingStudentIndex, setEditingStudentIndex] = useState<number | null>(null)
@@ -111,6 +147,7 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
 
   useEffect(() => {
     fetchTeachers()
+    fetchGroups()
   }, [])
 
   const fetchTeachers = async () => {
@@ -124,6 +161,43 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
       console.error('Error fetching teachers:', error)
     }
   }
+
+  const fetchGroups = async () => {
+    try {
+      setLoading(true)
+      const response = await authenticatedFetch('/api/groups')
+      if (response.ok) {
+        const data = (await response.json()) as Group[]
+        // Обогащаем группы данными о преподавателях
+        const enrichedGroups = data.map((group) => {
+          const teacher = teachers.find((t) => t.id === group.teacherId)
+          return {
+            ...group,
+            teacherFullName: teacher?.fullName || '',
+          }
+        })
+        setGroups(enrichedGroups)
+      }
+    } catch (error) {
+      console.error('Error fetching groups:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Обновляем группы при изменении списка преподавателей
+  useEffect(() => {
+    if (teachers.length > 0 && groups.length > 0) {
+      const enrichedGroups = groups.map((group) => {
+        const teacher = teachers.find((t) => t.id === group.teacherId)
+        return {
+          ...group,
+          teacherFullName: teacher?.fullName || '',
+        }
+      })
+      setGroups(enrichedGroups)
+    }
+  }, [teachers])
 
   const showSnackbar = (message: string, severity: 'success' | 'error') => {
     setSnackbar({ open: true, message, severity })
@@ -144,25 +218,44 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
     setAttendanceMap(new Map())
   }
 
-  const handleOpenAddDialog = () => {
-    resetForm()
+  const handleOpenAddDialog = async () => {
+    // Обновляем список преподавателей перед открытием диалога
+    await fetchTeachers()
     setOpenAddDialog(true)
+    // Данные НЕ сбрасываются - они сохраняются в состоянии компонента
+  }
+
+  const handleCloseAddDialog = () => {
+    // При закрытии модалки (клик вне или ESC) данные сохраняются в состоянии
+    setOpenAddDialog(false)
+  }
+
+  const handleCancelAddDialog = () => {
+    // При нажатии "Отмена" данные сбрасываются
+    resetForm()
+    setOpenAddDialog(false)
   }
 
   const handleAddSchedule = () => {
     setEditingScheduleIndex(null)
-    setScheduleDate('')
-    setScheduleStartTime('')
-    setScheduleEndTime('')
+    setScheduleDate(null)
+    setScheduleStartTime(null)
+    setScheduleEndTime(null)
+    setDatePickerOpen(false)
+    setStartTimePickerOpen(false)
+    setEndTimePickerOpen(false)
     setOpenScheduleDialog(true)
   }
 
   const handleEditSchedule = (index: number) => {
     const schedule = schedules[index]
     setEditingScheduleIndex(index)
-    setScheduleDate(schedule.date)
-    setScheduleStartTime(schedule.startTime)
-    setScheduleEndTime(schedule.endTime)
+    setScheduleDate(dayjs(schedule.date))
+    setScheduleStartTime(dayjs(schedule.startTime, 'HH:mm'))
+    setScheduleEndTime(dayjs(schedule.endTime, 'HH:mm'))
+    setDatePickerOpen(false)
+    setStartTimePickerOpen(false)
+    setEndTimePickerOpen(false)
     setOpenScheduleDialog(true)
   }
 
@@ -172,9 +265,9 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
     }
 
     const newSchedule: GroupSchedule = {
-      date: scheduleDate,
-      startTime: scheduleStartTime,
-      endTime: scheduleEndTime,
+      date: scheduleDate.format('YYYY-MM-DD'),
+      startTime: scheduleStartTime.format('HH:mm'),
+      endTime: scheduleEndTime.format('HH:mm'),
     }
 
     if (editingScheduleIndex !== null) {
@@ -337,6 +430,7 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
       resetForm()
       setAttendanceMap(new Map())
       showSnackbar('Група паспяхова дададзена', 'success')
+      fetchGroups()
     } catch (error) {
       console.error('Error saving group:', error)
       showSnackbar('Памылка пры даданні групы', 'error')
@@ -344,6 +438,153 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
       setLoading(false)
     }
   }
+
+  const handleOpenEditDialog = async (group: Group) => {
+    setEditingGroup(group)
+    setGroupName(group.name)
+    setSelectedTeacherId(group.teacherId)
+    setSelectedSubject(group.subject)
+    setCustomSubject(group.customSubject || '')
+    setSelectedLevel(group.level)
+    setSchedules(group.schedules || [])
+    setStudents(group.students || [])
+    await fetchTeachers()
+    setOpenEditDialog(true)
+  }
+
+  const handleSaveEditGroup = async () => {
+    if (!editingGroup || !groupName.trim() || !selectedTeacherId || !selectedSubject || !selectedLevel) {
+      return
+    }
+
+    try {
+      setLoading(true)
+      
+      const groupResponse = await authenticatedFetch('/api/groups', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editingGroup.id,
+          name: groupName.trim(),
+          teacherId: selectedTeacherId,
+          subject: selectedSubject,
+          customSubject: selectedSubject === 'Другой язык' ? customSubject.trim() : undefined,
+          level: selectedLevel,
+          schedules: schedules,
+          students: students,
+        }),
+      })
+
+      if (!groupResponse.ok) {
+        const error = (await groupResponse.json()) as { error: string }
+        showSnackbar(error.error || 'Памылка пры рэдагаванні групы', 'error')
+        return
+      }
+
+      setOpenEditDialog(false)
+      setEditingGroup(null)
+      resetForm()
+      setAttendanceMap(new Map())
+      showSnackbar('Група паспяхова адрэдагавана', 'success')
+      fetchGroups()
+    } catch (error) {
+      console.error('Error updating group:', error)
+      showSnackbar('Памылка пры рэдагаванні групы', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDeleteClick = (group: Group) => {
+    setGroupToDelete(group)
+    setShowDeleteConfirm(true)
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!groupToDelete) return
+
+    try {
+      const response = await authenticatedFetch(
+        `/api/groups?id=${groupToDelete.id}`,
+        {
+          method: 'DELETE',
+        }
+      )
+
+      if (response.ok) {
+        setShowDeleteConfirm(false)
+        setGroupToDelete(null)
+        fetchGroups()
+        showSnackbar('Група паспяхова выдалена', 'error')
+      } else {
+        const error = (await response.json()) as { error: string }
+        showSnackbar(error.error || 'Памылка пры выдаленні групы', 'error')
+      }
+    } catch (error) {
+      console.error('Error deleting group:', error)
+      showSnackbar('Памылка пры выдаленні групы', 'error')
+    }
+  }
+
+  const toggleSortOrder = () => {
+    setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
+  }
+
+  const getSubjectDisplay = (group: Group) => {
+    return group.subject === 'Другой язык' ? (group.customSubject || group.subject) : group.subject
+  }
+
+  // Фильтрация и сортировка
+  const filteredAndSortedGroups = React.useMemo(() => {
+    let filtered = groups.filter(
+      (group) =>
+        group.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (group.teacherFullName && group.teacherFullName.toLowerCase().includes(searchQuery.toLowerCase()))
+    )
+
+    filtered.sort((a, b) => {
+      let aValue: string | number
+      let bValue: string | number
+
+      if (sortField === 'default') {
+        // Сортировка по времени создания
+        const aDate = a.createdAt ? new Date(a.createdAt).getTime() : 0
+        const bDate = b.createdAt ? new Date(b.createdAt).getTime() : 0
+        aValue = aDate
+        bValue = bDate
+      } else if (sortField === 'level') {
+        const levelOrder = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']
+        aValue = levelOrder.indexOf(a.level)
+        bValue = levelOrder.indexOf(b.level)
+      } else if (sortField === 'teacher') {
+        aValue = (a.teacherFullName || '').toLowerCase()
+        bValue = (b.teacherFullName || '').toLowerCase()
+      } else if (sortField === 'subject') {
+        aValue = getSubjectDisplay(a).toLowerCase()
+        bValue = getSubjectDisplay(b).toLowerCase()
+      } else {
+        // name
+        aValue = a.name.toLowerCase()
+        bValue = b.name.toLowerCase()
+      }
+
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        if (sortOrder === 'asc') {
+          return aValue.localeCompare(bValue)
+        } else {
+          return bValue.localeCompare(aValue)
+        }
+      } else {
+        if (sortOrder === 'asc') {
+          return (aValue as number) - (bValue as number)
+        } else {
+          return (bValue as number) - (aValue as number)
+        }
+      }
+    })
+
+    return filtered
+  }, [groups, searchQuery, sortField, sortOrder])
 
   const isFormValid = () => {
     return !!(
@@ -355,8 +596,18 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
   }
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+    <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="ru">
+      <Box sx={{ p: 3 }}>
+      {/* Первая строка: кнопка добавления, селектор, иконка сортировки, поиск */}
+      <Box
+        sx={{
+          display: 'flex',
+          gap: 2,
+          mb: 2,
+          flexWrap: 'wrap',
+          alignItems: 'center',
+        }}
+      >
         <Tooltip title="Дадаць новую групу">
           <IconButton
             color="primary"
@@ -366,10 +617,133 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
             <AddIcon />
           </IconButton>
         </Tooltip>
+
+        <FormControl size="small" sx={{ minWidth: 200 }}>
+          <InputLabel id="sort-label">Сартыроўка</InputLabel>
+          <Select
+            labelId="sort-label"
+            value={sortField}
+            label="Сартыроўка"
+            onChange={(e) => setSortField(e.target.value as SortField)}
+          >
+            <MenuItem value="default">
+              <BelarusianText belarusian="Па змаўчанні" russian="По умолчанию" />
+            </MenuItem>
+            <MenuItem value="level">
+              <BelarusianText belarusian="Па ўзроўню" russian="По уровню" />
+            </MenuItem>
+            <MenuItem value="teacher">
+              <BelarusianText belarusian="Па выкладчыку" russian="По преподавателю" />
+            </MenuItem>
+            <MenuItem value="subject">
+              <BelarusianText belarusian="Па прадмеце" russian="По предмету" />
+            </MenuItem>
+            <MenuItem value="name">
+              <BelarusianText belarusian="Па назве групы" russian="По названию группы" />
+            </MenuItem>
+          </Select>
+        </FormControl>
+
+        <Tooltip title={sortOrder === 'asc' ? 'Сартыраваць па ўзрастанні' : 'Сартыраваць па змяншэнні'}>
+          <IconButton onClick={toggleSortOrder} color="primary">
+            {sortOrder === 'asc' ? <ArrowUpwardIcon /> : <ArrowDownwardIcon />}
+          </IconButton>
+        </Tooltip>
+
+        <Tooltip title="Поиск по названию группы или преподавателю" arrow>
+          <TextField
+            size="small"
+            placeholder="Пошук па назве групы або выкладчыку"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            sx={{ flexGrow: 1, minWidth: 200 }}
+          />
+        </Tooltip>
       </Box>
 
+      {/* Таблица групп */}
+      <TableContainer component={Paper} sx={{ mb: 2 }}>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>
+                <BelarusianText belarusian="Нумар" russian="Номер" />
+              </TableCell>
+              <TableCell>
+                <BelarusianText belarusian="Назва групы" russian="Название группы" />
+              </TableCell>
+              <TableCell>
+                <BelarusianText belarusian="Прадмет" russian="Предмет" />
+              </TableCell>
+              <TableCell>
+                <BelarusianText belarusian="Узровень" russian="Уровень" />
+              </TableCell>
+              <TableCell>
+                <BelarusianText belarusian="Выкладчык" russian="Преподаватель" />
+              </TableCell>
+              <TableCell align="right">
+                <BelarusianText belarusian="Дзеянні" russian="Действия" />
+              </TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={6} align="center">
+                  <BelarusianText belarusian="Загрузка..." russian="Загрузка..." />
+                </TableCell>
+              </TableRow>
+            ) : filteredAndSortedGroups.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} align="center">
+                  <BelarusianText
+                    belarusian="Групы не знойдзены"
+                    russian="Группы не найдены"
+                  />
+                </TableCell>
+              </TableRow>
+            ) : (
+              filteredAndSortedGroups.map((group, index) => (
+                <TableRow key={group.id}>
+                  <TableCell>{index + 1}</TableCell>
+                  <TableCell>{group.name}</TableCell>
+                  <TableCell>{getSubjectDisplay(group)}</TableCell>
+                  <TableCell>{group.level}</TableCell>
+                  <TableCell>{group.teacherFullName || ''}</TableCell>
+                  <TableCell align="right">
+                    <Tooltip title="Рэдагаваць групу">
+                      <IconButton
+                        size="small"
+                        onClick={() => handleOpenEditDialog(group)}
+                        color="primary"
+                      >
+                        <EditIcon />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Выдаліць групу">
+                      <IconButton
+                        size="small"
+                        onClick={() => handleDeleteClick(group)}
+                        color="error"
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    </Tooltip>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </TableContainer>
+
       {/* Диалог добавления группы */}
-      <Dialog open={openAddDialog} onClose={() => setOpenAddDialog(false)} maxWidth="md" fullWidth>
+      <Dialog 
+        open={openAddDialog} 
+        onClose={handleCloseAddDialog}
+        maxWidth="md" 
+        fullWidth
+      >
         <DialogTitle>
           <BelarusianText belarusian="Дадаць групу" russian="Добавить группу" />
         </DialogTitle>
@@ -392,7 +766,7 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
               >
                 {teachers.map((teacher) => (
                   <MenuItem key={teacher.id} value={teacher.id}>
-                    {teacher.fullName}
+                    {teacher.username} {teacher.fullName}
                   </MenuItem>
                 ))}
               </Select>
@@ -579,7 +953,7 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenAddDialog(false)}>
+          <Button onClick={handleCancelAddDialog}>
             <BelarusianText belarusian="Адмена" russian="Отмена" />
           </Button>
           <Button
@@ -607,32 +981,52 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
         </DialogTitle>
         <DialogContent>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
-            <TextField
+            <DatePicker
               label="Дата"
-              type="date"
               value={scheduleDate}
-              onChange={(e) => setScheduleDate(e.target.value)}
-              fullWidth
-              required
-              InputLabelProps={{ shrink: true }}
+              onChange={(newValue) => setScheduleDate(newValue)}
+              open={datePickerOpen}
+              onOpen={() => setDatePickerOpen(true)}
+              onClose={() => setDatePickerOpen(false)}
+              slotProps={{
+                textField: {
+                  fullWidth: true,
+                  required: true,
+                  onClick: () => setDatePickerOpen(true),
+                },
+              }}
             />
-            <TextField
+            <TimePicker
               label="Время начала"
-              type="time"
               value={scheduleStartTime}
-              onChange={(e) => setScheduleStartTime(e.target.value)}
-              fullWidth
-              required
-              InputLabelProps={{ shrink: true }}
+              onChange={(newValue) => setScheduleStartTime(newValue)}
+              open={startTimePickerOpen}
+              onOpen={() => setStartTimePickerOpen(true)}
+              onClose={() => setStartTimePickerOpen(false)}
+              ampm={false}
+              slotProps={{
+                textField: {
+                  fullWidth: true,
+                  required: true,
+                  onClick: () => setStartTimePickerOpen(true),
+                },
+              }}
             />
-            <TextField
+            <TimePicker
               label="Время конца"
-              type="time"
               value={scheduleEndTime}
-              onChange={(e) => setScheduleEndTime(e.target.value)}
-              fullWidth
-              required
-              InputLabelProps={{ shrink: true }}
+              onChange={(newValue) => setScheduleEndTime(newValue)}
+              open={endTimePickerOpen}
+              onOpen={() => setEndTimePickerOpen(true)}
+              onClose={() => setEndTimePickerOpen(false)}
+              ampm={false}
+              slotProps={{
+                textField: {
+                  fullWidth: true,
+                  required: true,
+                  onClick: () => setEndTimePickerOpen(true),
+                },
+              }}
             />
           </Box>
         </DialogContent>
@@ -768,6 +1162,241 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
         </DialogActions>
       </Dialog>
 
+      {/* Диалог редактирования группы */}
+      <Dialog
+        open={openEditDialog}
+        onClose={() => {
+          setOpenEditDialog(false)
+          setEditingGroup(null)
+        }}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          <BelarusianText belarusian="Рэдагаваць групу" russian="Редактировать группу" />
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
+            <TextField
+              label="Название"
+              value={groupName}
+              onChange={(e) => setGroupName(e.target.value)}
+              fullWidth
+              required
+            />
+
+            <FormControl fullWidth required>
+              <InputLabel>Преподаватель</InputLabel>
+              <Select
+                value={selectedTeacherId}
+                label="Преподаватель"
+                onChange={(e) => setSelectedTeacherId(e.target.value as number)}
+              >
+                {teachers.map((teacher) => (
+                  <MenuItem key={teacher.id} value={teacher.id}>
+                    {teacher.username} {teacher.fullName}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <FormControl fullWidth required>
+              <InputLabel>Предмет</InputLabel>
+              <Select
+                value={selectedSubject}
+                label="Предмет"
+                onChange={(e) => setSelectedSubject(e.target.value)}
+              >
+                {SUBJECTS.map((subject) => (
+                  <MenuItem key={subject} value={subject}>
+                    {subject}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            {selectedSubject === 'Другой язык' && (
+              <TextField
+                label="Название предмета"
+                value={customSubject}
+                onChange={(e) => setCustomSubject(e.target.value)}
+                fullWidth
+                required
+              />
+            )}
+
+            <FormControl fullWidth required>
+              <InputLabel>Уровень</InputLabel>
+              <Select
+                value={selectedLevel}
+                label="Уровень"
+                onChange={(e) => setSelectedLevel(e.target.value)}
+              >
+                {LEVELS.map((level) => (
+                  <MenuItem key={level} value={level}>
+                    {level}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            {/* График */}
+            <Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                <Typography variant="subtitle1">
+                  <BelarusianText belarusian="Графік" russian="График" />
+                </Typography>
+                <Tooltip title="Дадаць занятак">
+                  <IconButton size="small" color="primary" onClick={handleAddSchedule}>
+                    <AddIcon />
+                  </IconButton>
+                </Tooltip>
+              </Box>
+              {schedules.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">
+                  <BelarusianText
+                    belarusian="Графік не дададзены"
+                    russian="График не добавлен"
+                  />
+                </Typography>
+              ) : (
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                  {schedules.map((schedule, index) => (
+                    <Box
+                      key={index}
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1,
+                        p: 1,
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        borderRadius: 1,
+                      }}
+                    >
+                      <Typography variant="body2">
+                        {formatDate(schedule.date)} {formatTime(schedule.startTime)} -{' '}
+                        {formatTime(schedule.endTime)}
+                      </Typography>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleEditSchedule(index)}
+                        color="primary"
+                      >
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleDeleteSchedule(index)}
+                        color="error"
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Box>
+                  ))}
+                </Box>
+              )}
+            </Box>
+
+            {/* Студенты */}
+            <Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                <Typography variant="subtitle1">
+                  <BelarusianText belarusian="Студенты" russian="Студенты" />
+                </Typography>
+                <Tooltip title="Дадаць студента">
+                  <IconButton size="small" color="primary" onClick={handleAddStudent}>
+                    <AddIcon />
+                  </IconButton>
+                </Tooltip>
+              </Box>
+              {students.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">
+                  <BelarusianText
+                    belarusian="Студэнты не дададзены"
+                    russian="Студенты не добавлены"
+                  />
+                </Typography>
+              ) : (
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                  {students.map((student, index) => (
+                    <Box
+                      key={index}
+                      sx={{
+                        p: 1,
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        borderRadius: 1,
+                      }}
+                    >
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: schedules.length > 0 ? 1 : 0 }}>
+                        <Typography variant="body2" sx={{ flexGrow: 1 }}>
+                          {student.fullName}
+                        </Typography>
+                        <IconButton
+                          size="small"
+                          onClick={() => handleEditStudent(index)}
+                          color="primary"
+                        >
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          onClick={() => handleDeleteStudent(index)}
+                          color="error"
+                        >
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </Box>
+                      {/* Квадратики посещаемости под каждой датой */}
+                      {schedules.length > 0 && (
+                        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                          {schedules.map((schedule, scheduleIndex) => {
+                            const status = getAttendanceStatus(student, schedule)
+                            return (
+                              <Chip
+                                key={scheduleIndex}
+                                label={formatDate(schedule.date)}
+                                size="small"
+                                onClick={() => handleOpenAttendanceDialog(student, schedule)}
+                                sx={{
+                                  cursor: 'pointer',
+                                  backgroundColor: status === 'absent' ? 'orange' : status === 'present' ? 'green' : 'grey.300',
+                                  color: status ? 'white' : 'inherit',
+                                  '&:hover': {
+                                    backgroundColor: status === 'absent' ? 'orange' : status === 'present' ? 'green' : 'grey.400',
+                                    opacity: 0.8,
+                                  },
+                                }}
+                              />
+                            )
+                          })}
+                        </Box>
+                      )}
+                    </Box>
+                  ))}
+                </Box>
+              )}
+            </Box>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => {
+            setOpenEditDialog(false)
+            setEditingGroup(null)
+          }}>
+            <BelarusianText belarusian="Адмена" russian="Отмена" />
+          </Button>
+          <Button
+            onClick={handleSaveEditGroup}
+            variant="contained"
+            disabled={!isFormValid() || loading}
+          >
+            <BelarusianText belarusian="Захаваць" russian="Сохранить" />
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Подтверждение удаления занятия */}
       <ConfirmDialog
         open={openDeleteScheduleConfirm}
@@ -783,6 +1412,30 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
           />
         }
         message="Вы сапраўды хочаце выдаліць гэта занятак?"
+        confirmText={<BelarusianText belarusian="Выдаліць" russian="Удалить" />}
+        cancelText={<BelarusianText belarusian="Адмена" russian="Отмена" />}
+        confirmColor="error"
+      />
+
+      {/* Подтверждение удаления группы */}
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        onClose={() => {
+          setShowDeleteConfirm(false)
+          setGroupToDelete(null)
+        }}
+        onConfirm={handleDeleteConfirm}
+        title={
+          <BelarusianText
+            belarusian="Выдаліць групу?"
+            russian="Удалить группу?"
+          />
+        }
+        message={
+          groupToDelete
+            ? `Вы сапраўды хочаце выдаліць групу?\n\nНазва групы: ${groupToDelete.name}`
+            : ''
+        }
         confirmText={<BelarusianText belarusian="Выдаліць" russian="Удалить" />}
         cancelText={<BelarusianText belarusian="Адмена" russian="Отмена" />}
         confirmColor="error"
@@ -805,5 +1458,6 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
         </Alert>
       </Snackbar>
     </Box>
+    </LocalizationProvider>
   )
 }
