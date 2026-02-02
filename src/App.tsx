@@ -19,6 +19,14 @@ import CssBaseline from '@mui/material/CssBaseline'
 import { BelarusianText } from './components/BelarusianText'
 import { Teachers } from './components/Teachers'
 import { Groups } from './components/Groups'
+import { getJwtExpiryMs } from './shared/lib/auth/jwt'
+import {
+  clearTokensFromStorage,
+  readAccessTokenFromStorage,
+  readRefreshTokenFromStorage,
+  writeTokensToStorage,
+  type AuthTokens,
+} from './shared/lib/auth/tokens'
 
 const theme = createTheme({
   palette: {
@@ -51,28 +59,32 @@ function App() {
   }
 
   const handleCloseSnackbar = () => {
-    setSnackbar({ ...snackbar, open: false })
+    setSnackbar((prev) => ({ ...prev, open: false }))
   }
 
   const refreshTimerRef = useRef<number | null>(null)
+  const refreshInFlightRef = useRef<Promise<boolean> | null>(null)
+
+  const TOKEN_REFRESH_EARLY_MS = 2 * 60 * 1000
+  const MIN_REFRESH_RETRY_DELAY_MS = 1000
 
   // Проверка авторизации при загрузке
   useEffect(() => {
-    const storedAccessToken = localStorage.getItem('accessToken')
-    const storedRefreshToken = localStorage.getItem('refreshToken')
+    const storedAccessToken = readAccessTokenFromStorage()
+    const storedRefreshToken = readRefreshTokenFromStorage()
 
     if (storedAccessToken && storedRefreshToken) {
       setAccessToken(storedAccessToken)
       setIsAuthenticated(true)
       // Проверяем валидность токена
-      checkTokenAndRefresh()
+      void checkTokenAndRefresh(storedAccessToken)
     }
   }, [])
 
   // Настройка автоматического обновления токена
   useEffect(() => {
     if (isAuthenticated && accessToken) {
-      setupTokenRefresh()
+      setupTokenRefresh(accessToken)
     }
 
     return () => {
@@ -83,96 +95,102 @@ function App() {
   }, [isAuthenticated, accessToken])
 
   // Проверка и обновление токена
-  const checkTokenAndRefresh = async () => {
-    const storedAccessToken = localStorage.getItem('accessToken')
-
-    if (!storedAccessToken) {
-      handleLogout()
+  const checkTokenAndRefresh = async (token: string) => {
+    const expiresAtMs = getJwtExpiryMs(token)
+    if (!expiresAtMs) {
+      await refreshAccessToken()
       return
     }
 
-    // Проверяем срок действия access токена
-    try {
-      const payload = JSON.parse(atob(storedAccessToken.split('.')[1]))
-      const expiresAt = payload.exp * 1000
-      const now = Date.now()
-
-      // Если токен истекает в течение 2 минут, обновляем
-      if (expiresAt - now < 2 * 60 * 1000) {
-        await refreshAccessToken()
-      }
-    } catch (error) {
-      console.error('Error checking token:', error)
+    const nowMs = Date.now()
+    if (expiresAtMs - nowMs < TOKEN_REFRESH_EARLY_MS) {
       await refreshAccessToken()
     }
   }
 
   // Настройка автоматического обновления токена
-  const setupTokenRefresh = () => {
+  const setupTokenRefresh = (token: string) => {
     if (refreshTimerRef.current) {
       clearTimeout(refreshTimerRef.current)
     }
 
-    try {
-      const payload = JSON.parse(atob(accessToken!.split('.')[1]))
-      const expiresAt = payload.exp * 1000
-      const now = Date.now()
-      const timeUntilExpiry = expiresAt - now - 2 * 60 * 1000 // Обновляем за 2 минуты до истечения
+    const expiresAtMs = getJwtExpiryMs(token)
+    if (!expiresAtMs) return
 
-      if (timeUntilExpiry > 0) {
-        refreshTimerRef.current = window.setTimeout(() => {
-          refreshAccessToken()
-        }, timeUntilExpiry)
-      } else {
-        // Токен уже истекает, обновляем сразу
-        refreshAccessToken()
-      }
-    } catch (error) {
-      console.error('Error setting up token refresh:', error)
+    const nowMs = Date.now()
+    const refreshInMs = expiresAtMs - nowMs - TOKEN_REFRESH_EARLY_MS
+
+    if (refreshInMs > 0) {
+      refreshTimerRef.current = window.setTimeout(() => {
+        void refreshAccessToken()
+      }, refreshInMs)
+      return
     }
+
+    // Токен уже "на пороге" истечения — рефрешим один раз,
+    // но не допускаем рекурсивного каскада.
+    refreshTimerRef.current = window.setTimeout(() => {
+      void refreshAccessToken()
+    }, MIN_REFRESH_RETRY_DELAY_MS)
   }
 
   // Обновление access токена
   const refreshAccessToken = async () => {
+    if (refreshInFlightRef.current) {
+      return refreshInFlightRef.current
+    }
+
     const storedRefreshToken = localStorage.getItem('refreshToken')
     if (!storedRefreshToken) {
       handleLogout()
-      return
+      return false
     }
 
-    try {
-      const response = await fetch('/api/auth/refresh', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ refreshToken: storedRefreshToken }),
-      })
+    const runRefresh = async (): Promise<boolean> => {
+      try {
+        const response = await fetch('/api/auth/refresh', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ refreshToken: storedRefreshToken }),
+        })
 
-      if (response.ok) {
-        const data = await response.json() as {
-          accessToken: string
-          refreshToken: string
+        if (!response.ok) {
+          handleLogout()
+          return false
         }
+
+        const data = (await response.json()) as AuthTokens
+        if (!data.accessToken || !data.refreshToken) {
+          handleLogout()
+          return false
+        }
+
         setAccessToken(data.accessToken)
-        localStorage.setItem('accessToken', data.accessToken)
-        localStorage.setItem('refreshToken', data.refreshToken)
-        setupTokenRefresh()
-      } else {
+        writeTokensToStorage(data)
+        setupTokenRefresh(data.accessToken)
+        return true
+      } catch (error) {
+        console.error('Error refreshing token:', error)
         handleLogout()
+        return false
       }
-    } catch (error) {
-      console.error('Error refreshing token:', error)
-      handleLogout()
     }
+
+    const refreshPromise = runRefresh().finally(() => {
+      refreshInFlightRef.current = null
+    })
+
+    refreshInFlightRef.current = refreshPromise
+    return refreshPromise
   }
 
   // Выход
   const handleLogout = () => {
     setIsAuthenticated(false)
     setAccessToken(null)
-    localStorage.removeItem('accessToken')
-    localStorage.removeItem('refreshToken')
+    clearTokensFromStorage()
     if (refreshTimerRef.current) {
       clearTimeout(refreshTimerRef.current)
     }
@@ -194,16 +212,13 @@ function App() {
       })
 
       if (response.ok) {
-        const data = await response.json() as {
-          accessToken: string
-          refreshToken: string
-        }
+        const data = (await response.json()) as AuthTokens
         setAccessToken(data.accessToken)
         setIsAuthenticated(true)
-        localStorage.setItem('accessToken', data.accessToken)
-        localStorage.setItem('refreshToken', data.refreshToken)
+        writeTokensToStorage(data)
         setUsername('')
         setPassword('')
+        setupTokenRefresh(data.accessToken)
       } else {
         const errorData = await response.json() as { error: string }
         const errorMessage = errorData.error || 'Invalid credentials'
@@ -225,7 +240,12 @@ function App() {
     url: string,
     options: RequestInit = {}
   ) => {
-    const token = localStorage.getItem('accessToken')
+    // Никогда не запускаем refresh из самого refresh-endpoint
+    if (url.includes('/api/auth/refresh')) {
+      return fetch(url, options)
+    }
+
+    const token = readAccessTokenFromStorage()
     if (!token) {
       handleLogout()
       throw new Error('Not authenticated')
@@ -241,21 +261,31 @@ function App() {
 
     // Если получили 401, пробуем обновить токен
     if (response.status === 401) {
-      await refreshAccessToken()
-      const newToken = localStorage.getItem('accessToken')
-      if (newToken) {
-        // Повторяем запрос с новым токеном
-        return fetch(url, {
-          ...options,
-          headers: {
-            ...options.headers,
-            Authorization: `Bearer ${newToken}`,
-          },
-        })
-      } else {
+      const didRefreshSucceed = await refreshAccessToken()
+      if (!didRefreshSucceed) {
+        throw new Error('Authentication failed')
+      }
+
+      const newToken = readAccessTokenFromStorage()
+      if (!newToken) {
         handleLogout()
         throw new Error('Authentication failed')
       }
+
+      const retriedResponse = await fetch(url, {
+        ...options,
+        headers: {
+          ...options.headers,
+          Authorization: `Bearer ${newToken}`,
+        },
+      })
+
+      if (retriedResponse.status === 401) {
+        handleLogout()
+        throw new Error('Authentication failed')
+      }
+
+      return retriedResponse
     }
 
     return response

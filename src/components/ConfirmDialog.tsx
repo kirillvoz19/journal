@@ -1,13 +1,13 @@
 import React from 'react'
 import {
   Dialog,
-  DialogTitle,
   DialogContent,
   DialogActions,
   Button,
   Typography,
 } from '@mui/material'
 import { BelarusianText } from './BelarusianText'
+import { DialogTitleWithClose } from '../shared/ui/dialog-title-with-close'
 
 interface ConfirmDialogProps {
   open: boolean
@@ -32,7 +32,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
 }) => {
   return (
     <Dialog open={open} onClose={onClose}>
-      <DialogTitle>{title}</DialogTitle>
+      <DialogTitleWithClose onClose={onClose}>{title}</DialogTitleWithClose>
       <DialogContent>
         <Typography component="div" sx={{ whiteSpace: 'pre-line' }}>
           {message}

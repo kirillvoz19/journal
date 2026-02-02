@@ -34,7 +34,7 @@ export const onRequestGet: PagesFunction<Env> = requireAuth(async (context) => {
     const scheduleId = url.searchParams.get('scheduleId')
 
     let query = 'SELECT * FROM attendance WHERE 1=1'
-    const params: any[] = []
+    const params: number[] = []
 
     if (studentId) {
       query += ' AND studentId = ?'
@@ -52,8 +52,8 @@ export const onRequestGet: PagesFunction<Env> = requireAuth(async (context) => {
     return new Response(JSON.stringify(result.results || []), {
       headers: { 'Content-Type': 'application/json' },
     })
-  } catch (error) {
-    console.error('Error fetching attendance:', error)
+  } catch {
+    console.error('Error fetching attendance')
     return new Response(
       JSON.stringify({ error: 'Failed to fetch attendance' }),
       {
@@ -134,10 +134,60 @@ export const onRequestPost: PagesFunction<Env> = requireAuth(async (context) => 
         headers: { 'Content-Type': 'application/json' },
       })
     }
-  } catch (error: any) {
-    console.error('Error saving attendance:', error)
+  } catch {
+    console.error('Error saving attendance')
     return new Response(
       JSON.stringify({ error: 'Failed to save attendance' }),
+      {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    )
+  }
+})
+
+// @ts-ignore
+export const onRequestDelete: PagesFunction<Env> = requireAuth(async (context) => {
+  const { env, request } = context
+
+  try {
+    if (!env.DB) {
+      return new Response(
+        JSON.stringify({ error: 'Database not configured' }),
+        {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        }
+      )
+    }
+
+    const url = new URL(request.url)
+    const studentId = url.searchParams.get('studentId')
+    const scheduleId = url.searchParams.get('scheduleId')
+
+    if (!studentId || !scheduleId) {
+      return new Response(
+        JSON.stringify({ error: 'studentId and scheduleId are required' }),
+        {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        }
+      )
+    }
+
+    await env.DB.prepare(
+      'DELETE FROM attendance WHERE studentId = ? AND scheduleId = ?'
+    )
+      .bind(parseInt(studentId), parseInt(scheduleId))
+      .run()
+
+    return new Response(JSON.stringify({ success: true }), {
+      headers: { 'Content-Type': 'application/json' },
+    })
+  } catch {
+    console.error('Error deleting attendance')
+    return new Response(
+      JSON.stringify({ error: 'Failed to delete attendance' }),
       {
         status: 500,
         headers: { 'Content-Type': 'application/json' },

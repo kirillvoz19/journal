@@ -5,7 +5,6 @@ import {
   TextField,
   IconButton,
   Dialog,
-  DialogTitle,
   DialogContent,
   DialogActions,
   Select,
@@ -43,39 +42,21 @@ import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward'
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward'
 import { BelarusianText } from './BelarusianText'
 import { ConfirmDialog } from './ConfirmDialog'
-
-interface Teacher {
-  id: number
-  username: string
-  fullName: string
-}
-
-interface GroupSchedule {
-  id?: number
-  date: string
-  startTime: string
-  endTime: string
-}
-
-interface GroupStudent {
-  id?: number
-  fullName: string
-  email?: string
-  phone?: string
-}
-
-interface Group {
-  id?: number
-  name: string
-  teacherId: number
-  teacherFullName?: string
-  subject: string
-  customSubject?: string
-  level: string
-  createdAt?: string
-  schedules?: GroupSchedule[]
-  students?: GroupStudent[]
-}
+import { DialogTitleWithClose } from '../shared/ui/dialog-title-with-close'
+import type {
+  AttendanceEditStatus,
+  AttendanceStatus,
+  Group,
+  GroupSchedule,
+  GroupStudent,
+  Teacher,
+} from '../features/groups/model/types'
+import {
+  deleteAttendanceRecords,
+  loadAttendanceMapForGroup,
+  makeAttendanceKeyFromEntities,
+  saveAttendanceRecords,
+} from '../features/groups/model/attendance'
 
 type SortField = 'default' | 'level' | 'teacher' | 'subject' | 'name'
 type SortOrder = 'asc' | 'desc'
@@ -100,7 +81,7 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [groupToDelete, setGroupToDelete] = useState<Group | null>(null)
 
-  // Форма группы
+  // Форма групы
   const [groupName, setGroupName] = useState('')
   const [selectedTeacherId, setSelectedTeacherId] = useState<number | ''>('')
   const [selectedSubject, setSelectedSubject] = useState('')
@@ -128,8 +109,9 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
   const [openAttendanceDialog, setOpenAttendanceDialog] = useState(false)
   const [attendanceStudent, setAttendanceStudent] = useState<GroupStudent | null>(null)
   const [attendanceSchedule, setAttendanceSchedule] = useState<GroupSchedule | null>(null)
-  const [attendanceStatus, setAttendanceStatus] = useState<'present' | 'absent'>('present')
-  const [attendanceMap, setAttendanceMap] = useState<Map<string, 'present' | 'absent'>>(new Map())
+  const [attendanceStatus, setAttendanceStatus] = useState<AttendanceEditStatus>('unset')
+  const [attendanceMap, setAttendanceMap] = useState<Map<string, AttendanceStatus>>(new Map())
+  const [unsetAttendanceKeys, setUnsetAttendanceKeys] = useState<Set<string>>(() => new Set())
 
   const [openDeleteScheduleConfirm, setOpenDeleteScheduleConfirm] = useState(false)
   const [scheduleToDeleteIndex, setScheduleToDeleteIndex] = useState<number | null>(null)
@@ -149,6 +131,14 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
     fetchTeachers()
     fetchGroups()
   }, [])
+
+  const enrichGroupWithTeacher = (group: Group): Group => {
+    const teacher = teachers.find((t) => t.id === group.teacherId)
+    return {
+      ...group,
+      teacherFullName: teacher?.fullName || '',
+    }
+  }
 
   const fetchTeachers = async () => {
     try {
@@ -199,6 +189,16 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
     }
   }, [teachers])
 
+  const fetchGroupById = async (groupId: number): Promise<Group | null> => {
+    const response = await authenticatedFetch('/api/groups')
+    if (!response.ok) {
+      return null
+    }
+    const data = (await response.json()) as Group[]
+    const found = data.find((g) => g.id === groupId)
+    return found ? enrichGroupWithTeacher(found) : null
+  }
+
   const showSnackbar = (message: string, severity: 'success' | 'error') => {
     setSnackbar({ open: true, message, severity })
   }
@@ -216,6 +216,7 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
     setSchedules([])
     setStudents([])
     setAttendanceMap(new Map())
+    setUnsetAttendanceKeys(new Set())
   }
 
   const handleOpenAddDialog = async () => {
@@ -230,8 +231,25 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
     setOpenAddDialog(false)
   }
 
+  const handleCloseScheduleDialog = () => {
+    setOpenScheduleDialog(false)
+  }
+
+  const handleCloseStudentDialog = () => {
+    setOpenStudentDialog(false)
+  }
+
+  const handleCloseAttendanceDialog = () => {
+    setOpenAttendanceDialog(false)
+  }
+
+  const handleCloseEditDialog = () => {
+    setOpenEditDialog(false)
+    setEditingGroup(null)
+  }
+
   const handleCancelAddDialog = () => {
-    // При нажатии "Отмена" данные сбрасываются
+    // Пры націску "Адмена" даныя скідваюцца
     resetForm()
     setOpenAddDialog(false)
   }
@@ -343,8 +361,8 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
     setAttendanceStudent(student)
     setAttendanceSchedule(schedule)
     // Load existing attendance status if available
-    const key = `${student.id || student.fullName}-${schedule.date}`
-    const existingStatus = attendanceMap.get(key) || 'present'
+    const key = makeAttendanceKeyFromEntities(student, schedule)
+    const existingStatus: AttendanceEditStatus = attendanceMap.get(key) ?? 'unset'
     setAttendanceStatus(existingStatus)
     setOpenAttendanceDialog(true)
   }
@@ -353,16 +371,38 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
     if (!attendanceStudent || !attendanceSchedule) {
       return
     }
-    const key = `${attendanceStudent.id || attendanceStudent.fullName}-${attendanceSchedule.date}`
-    const newMap = new Map(attendanceMap)
-    newMap.set(key, attendanceStatus)
-    setAttendanceMap(newMap)
+    const key = makeAttendanceKeyFromEntities(attendanceStudent, attendanceSchedule)
+    if (attendanceStatus === 'unset') {
+      setAttendanceMap((prev) => {
+        const next = new Map(prev)
+        next.delete(key)
+        return next
+      })
+      setUnsetAttendanceKeys((prev) => {
+        const next = new Set(prev)
+        next.add(key)
+        return next
+      })
+      setOpenAttendanceDialog(false)
+      return
+    }
+
+    setAttendanceMap((prev) => {
+      const next = new Map(prev)
+      next.set(key, attendanceStatus)
+      return next
+    })
+    setUnsetAttendanceKeys((prev) => {
+      const next = new Set(prev)
+      next.delete(key)
+      return next
+    })
     setOpenAttendanceDialog(false)
   }
 
-  const getAttendanceStatus = (student: GroupStudent, schedule: GroupSchedule): 'present' | 'absent' | null => {
-    const key = `${student.id || student.fullName}-${schedule.date}`
-    return attendanceMap.get(key) || null
+  const getAttendanceStatus = (student: GroupStudent, schedule: GroupSchedule): AttendanceStatus | null => {
+    const key = makeAttendanceKeyFromEntities(student, schedule)
+    return attendanceMap.get(key) ?? null
   }
 
   const formatDate = (dateString: string) => {
@@ -406,33 +446,26 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
       const savedGroup = (await groupResponse.json()) as Group
       
       // Save attendance records
-      if (savedGroup.students && savedGroup.schedules && attendanceMap.size > 0) {
-        for (const [key, status] of attendanceMap.entries()) {
-          const [studentKey, date] = key.split('-')
-          const student = savedGroup.students!.find((s) => (s.id?.toString() || s.fullName) === studentKey)
-          const schedule = savedGroup.schedules!.find((s) => s.date === date)
-          
-          if (student && schedule && student.id && schedule.id) {
-            await authenticatedFetch('/api/attendance', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                studentId: student.id,
-                scheduleId: schedule.id,
-                status: status,
-              }),
-            })
-          }
-        }
-      }
+      await saveAttendanceRecords({
+        authenticatedFetch,
+        group: savedGroup,
+        attendanceMap,
+      })
+      await deleteAttendanceRecords({
+        authenticatedFetch,
+        group: savedGroup,
+        unsetAttendanceKeys,
+      })
 
+      setGroups((prev) => [...prev, enrichGroupWithTeacher(savedGroup)])
       setOpenAddDialog(false)
       resetForm()
       setAttendanceMap(new Map())
+      setUnsetAttendanceKeys(new Set())
       showSnackbar('Група паспяхова дададзена', 'success')
       fetchGroups()
-    } catch (error) {
-      console.error('Error saving group:', error)
+    } catch {
+      console.error('Error saving group')
       showSnackbar('Памылка пры даданні групы', 'error')
     } finally {
       setLoading(false)
@@ -440,16 +473,34 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
   }
 
   const handleOpenEditDialog = async (group: Group) => {
-    setEditingGroup(group)
-    setGroupName(group.name)
-    setSelectedTeacherId(group.teacherId)
-    setSelectedSubject(group.subject)
-    setCustomSubject(group.customSubject || '')
-    setSelectedLevel(group.level)
-    setSchedules(group.schedules || [])
-    setStudents(group.students || [])
-    await fetchTeachers()
-    setOpenEditDialog(true)
+    try {
+      setLoading(true)
+      await fetchTeachers()
+
+      const groupId = group.id
+      const freshGroup = typeof groupId === 'number' ? await fetchGroupById(groupId) : null
+      const groupToEdit = freshGroup ?? group
+
+      setEditingGroup(groupToEdit)
+      setGroupName(groupToEdit.name)
+      setSelectedTeacherId(groupToEdit.teacherId)
+      setSelectedSubject(groupToEdit.subject)
+      setCustomSubject(groupToEdit.customSubject || '')
+      setSelectedLevel(groupToEdit.level)
+      setSchedules(groupToEdit.schedules || [])
+      setStudents(groupToEdit.students || [])
+      setAttendanceMap(new Map())
+      setUnsetAttendanceKeys(new Set())
+      setOpenEditDialog(true)
+
+      const loadedMap = await loadAttendanceMapForGroup({ authenticatedFetch, group: groupToEdit })
+      setAttendanceMap(loadedMap)
+    } catch {
+      console.error('Error opening edit dialog')
+      setOpenEditDialog(true)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleSaveEditGroup = async () => {
@@ -481,14 +532,31 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
         return
       }
 
+      const savedGroup = (await groupResponse.json()) as Group
+
+      await saveAttendanceRecords({
+        authenticatedFetch,
+        group: savedGroup,
+        attendanceMap,
+      })
+      await deleteAttendanceRecords({
+        authenticatedFetch,
+        group: savedGroup,
+        unsetAttendanceKeys,
+      })
+
+      setGroups((prev) =>
+        prev.map((g) => (g.id === savedGroup.id ? enrichGroupWithTeacher(savedGroup) : g))
+      )
       setOpenEditDialog(false)
       setEditingGroup(null)
       resetForm()
       setAttendanceMap(new Map())
+      setUnsetAttendanceKeys(new Set())
       showSnackbar('Група паспяхова адрэдагавана', 'success')
       fetchGroups()
-    } catch (error) {
-      console.error('Error updating group:', error)
+    } catch {
+      console.error('Error updating group')
       showSnackbar('Памылка пры рэдагаванні групы', 'error')
     } finally {
       setLoading(false)
@@ -744,13 +812,13 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
         maxWidth="md" 
         fullWidth
       >
-        <DialogTitle>
+        <DialogTitleWithClose onClose={handleCloseAddDialog}>
           <BelarusianText belarusian="Дадаць групу" russian="Добавить группу" />
-        </DialogTitle>
+        </DialogTitleWithClose>
         <DialogContent>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
             <TextField
-              label="Название"
+              label="Назва"
               value={groupName}
               onChange={(e) => setGroupName(e.target.value)}
               fullWidth
@@ -758,10 +826,10 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
             />
 
             <FormControl fullWidth required>
-              <InputLabel>Преподаватель</InputLabel>
+              <InputLabel>Выкладчык</InputLabel>
               <Select
                 value={selectedTeacherId}
-                label="Преподаватель"
+                label="Выкладчык"
                 onChange={(e) => setSelectedTeacherId(e.target.value as number)}
               >
                 {teachers.map((teacher) => (
@@ -773,10 +841,10 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
             </FormControl>
 
             <FormControl fullWidth required>
-              <InputLabel>Предмет</InputLabel>
+              <InputLabel>Прадмет</InputLabel>
               <Select
                 value={selectedSubject}
-                label="Предмет"
+                label="Прадмет"
                 onChange={(e) => setSelectedSubject(e.target.value)}
               >
                 {SUBJECTS.map((subject) => (
@@ -789,7 +857,7 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
 
             {selectedSubject === 'Другой язык' && (
               <TextField
-                label="Название предмета"
+                label="Назва прадмета"
                 value={customSubject}
                 onChange={(e) => setCustomSubject(e.target.value)}
                 fullWidth
@@ -798,10 +866,10 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
             )}
 
             <FormControl fullWidth required>
-              <InputLabel>Уровень</InputLabel>
+              <InputLabel>Узровень</InputLabel>
               <Select
                 value={selectedLevel}
-                label="Уровень"
+                label="Узровень"
                 onChange={(e) => setSelectedLevel(e.target.value)}
               >
                 {LEVELS.map((level) => (
@@ -969,16 +1037,16 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
       {/* Диалог добавления/редактирования занятия */}
       <Dialog
         open={openScheduleDialog}
-        onClose={() => setOpenScheduleDialog(false)}
+        onClose={handleCloseScheduleDialog}
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle>
+        <DialogTitleWithClose onClose={handleCloseScheduleDialog}>
           <BelarusianText
             belarusian={editingScheduleIndex !== null ? 'Рэдагаваць занятак' : 'Дадаць занятак'}
             russian={editingScheduleIndex !== null ? 'Редактировать занятие' : 'Добавить занятие'}
           />
-        </DialogTitle>
+        </DialogTitleWithClose>
         <DialogContent>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
             <DatePicker
@@ -997,7 +1065,7 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
               }}
             />
             <TimePicker
-              label="Время начала"
+              label="Час пачатку"
               value={scheduleStartTime}
               onChange={(newValue) => setScheduleStartTime(newValue)}
               open={startTimePickerOpen}
@@ -1013,7 +1081,7 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
               }}
             />
             <TimePicker
-              label="Время конца"
+              label="Час заканчэння"
               value={scheduleEndTime}
               onChange={(newValue) => setScheduleEndTime(newValue)}
               open={endTimePickerOpen}
@@ -1031,7 +1099,7 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenScheduleDialog(false)}>
+          <Button onClick={handleCloseScheduleDialog}>
             <BelarusianText belarusian="Адмена" russian="Отмена" />
           </Button>
           <Button
@@ -1047,20 +1115,20 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
       {/* Диалог добавления/редактирования студента */}
       <Dialog
         open={openStudentDialog}
-        onClose={() => setOpenStudentDialog(false)}
+        onClose={handleCloseStudentDialog}
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle>
+        <DialogTitleWithClose onClose={handleCloseStudentDialog}>
           <BelarusianText
             belarusian={editingStudentIndex !== null ? 'Рэдагаваць студента' : 'Дадаць студента'}
             russian={editingStudentIndex !== null ? 'Редактировать студента' : 'Добавить студента'}
           />
-        </DialogTitle>
+        </DialogTitleWithClose>
         <DialogContent>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
             <TextField
-              label="ФИО"
+              label="ПІБ"
               value={studentFullName}
               onChange={(e) => setStudentFullName(e.target.value)}
               fullWidth
@@ -1074,7 +1142,7 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
               fullWidth
             />
             <TextField
-              label="Телефон"
+              label="Тэлефон"
               type="tel"
               value={studentPhone}
               onChange={(e) => setStudentPhone(e.target.value)}
@@ -1083,7 +1151,7 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenStudentDialog(false)}>
+          <Button onClick={handleCloseStudentDialog}>
             <BelarusianText belarusian="Адмена" russian="Отмена" />
           </Button>
           <Button
@@ -1099,21 +1167,21 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
       {/* Диалог изменения посещаемости */}
       <Dialog
         open={openAttendanceDialog}
-        onClose={() => setOpenAttendanceDialog(false)}
+        onClose={handleCloseAttendanceDialog}
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle>
+        <DialogTitleWithClose onClose={handleCloseAttendanceDialog}>
           <BelarusianText
             belarusian="Змена звестак пра наведванне"
             russian="Изменение сведений о посещаемости"
           />
-        </DialogTitle>
+        </DialogTitleWithClose>
         <DialogContent>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
             {attendanceStudent && (
               <TextField
-                label="ФИО студента"
+                label="ПІБ студэнта"
                 value={attendanceStudent.fullName}
                 disabled
                 fullWidth
@@ -1128,7 +1196,7 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
                   fullWidth
                 />
                 <TextField
-                  label="Время занятий"
+                  label="Час заняткаў"
                   value={`${formatTime(attendanceSchedule.startTime)} - ${formatTime(attendanceSchedule.endTime)}`}
                   disabled
                   fullWidth
@@ -1140,8 +1208,11 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
               <Select
                 value={attendanceStatus}
                 label="Статус"
-                onChange={(e) => setAttendanceStatus(e.target.value as 'present' | 'absent')}
+                onChange={(e) => setAttendanceStatus(e.target.value as AttendanceEditStatus)}
               >
+                <MenuItem value="unset">
+                  <BelarusianText belarusian="Не ўсталявана" russian="Не установлено" />
+                </MenuItem>
                 <MenuItem value="present">
                   <BelarusianText belarusian="Прысутнічаў" russian="Присутствовал" />
                 </MenuItem>
@@ -1153,7 +1224,7 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenAttendanceDialog(false)}>
+          <Button onClick={handleCloseAttendanceDialog}>
             <BelarusianText belarusian="Адмена" russian="Отмена" />
           </Button>
           <Button onClick={handleSaveAttendance} variant="contained">
@@ -1165,20 +1236,17 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
       {/* Диалог редактирования группы */}
       <Dialog
         open={openEditDialog}
-        onClose={() => {
-          setOpenEditDialog(false)
-          setEditingGroup(null)
-        }}
+        onClose={handleCloseEditDialog}
         maxWidth="md"
         fullWidth
       >
-        <DialogTitle>
+        <DialogTitleWithClose onClose={handleCloseEditDialog}>
           <BelarusianText belarusian="Рэдагаваць групу" russian="Редактировать группу" />
-        </DialogTitle>
+        </DialogTitleWithClose>
         <DialogContent>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
             <TextField
-              label="Название"
+              label="Назва"
               value={groupName}
               onChange={(e) => setGroupName(e.target.value)}
               fullWidth
@@ -1186,10 +1254,10 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
             />
 
             <FormControl fullWidth required>
-              <InputLabel>Преподаватель</InputLabel>
+              <InputLabel>Выкладчык</InputLabel>
               <Select
                 value={selectedTeacherId}
-                label="Преподаватель"
+                label="Выкладчык"
                 onChange={(e) => setSelectedTeacherId(e.target.value as number)}
               >
                 {teachers.map((teacher) => (
@@ -1201,10 +1269,10 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
             </FormControl>
 
             <FormControl fullWidth required>
-              <InputLabel>Предмет</InputLabel>
+              <InputLabel>Прадмет</InputLabel>
               <Select
                 value={selectedSubject}
-                label="Предмет"
+                label="Прадмет"
                 onChange={(e) => setSelectedSubject(e.target.value)}
               >
                 {SUBJECTS.map((subject) => (
@@ -1217,7 +1285,7 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
 
             {selectedSubject === 'Другой язык' && (
               <TextField
-                label="Название предмета"
+                label="Назва прадмета"
                 value={customSubject}
                 onChange={(e) => setCustomSubject(e.target.value)}
                 fullWidth
@@ -1226,10 +1294,10 @@ export const Groups: React.FC<GroupsProps> = ({ authenticatedFetch }) => {
             )}
 
             <FormControl fullWidth required>
-              <InputLabel>Уровень</InputLabel>
+              <InputLabel>Узровень</InputLabel>
               <Select
                 value={selectedLevel}
-                label="Уровень"
+                label="Узровень"
                 onChange={(e) => setSelectedLevel(e.target.value)}
               >
                 {LEVELS.map((level) => (
