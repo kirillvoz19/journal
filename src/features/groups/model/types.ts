@@ -1,8 +1,5 @@
-export interface Teacher {
-  id: number
-  username: string
-  fullName: string
-}
+import type { Teacher } from '../../../entities/teacher/model/types'
+export type { Teacher }
 
 export interface GroupSchedule {
   id?: number

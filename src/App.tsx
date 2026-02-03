@@ -7,18 +7,12 @@ import {
   Button,
   Typography,
   Alert,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
   Tooltip,
   Snackbar,
 } from '@mui/material'
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import { ThemeProvider, createTheme } from '@mui/material/styles'
 import CssBaseline from '@mui/material/CssBaseline'
 import { BelarusianText } from './components/BelarusianText'
-import { Teachers } from './components/Teachers'
-import { Groups } from './components/Groups'
 import { getJwtExpiryMs } from './shared/lib/auth/jwt'
 import {
   clearTokensFromStorage,
@@ -27,6 +21,7 @@ import {
   writeTokensToStorage,
   type AuthTokens,
 } from './shared/lib/auth/tokens'
+import { AppRouter } from './app/providers/router/AppRouter'
 
 const theme = createTheme({
   palette: {
@@ -394,59 +389,7 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Box
-        sx={{
-          minHeight: '100vh',
-          backgroundColor: '#ffffff',
-        }}
-      >
-        <Container maxWidth="lg" sx={{ py: 4 }}>
-          <Box
-            sx={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              mb: 3,
-            }}
-          >
-            <Typography variant="h4" component="h1">
-              <BelarusianText belarusian="Журнал" russian="Журнал" />
-            </Typography>
-            <Button variant="outlined" onClick={handleLogout}>
-              <BelarusianText belarusian="Выйсці" russian="Выйти" />
-            </Button>
-          </Box>
-
-          <Box>
-            <Accordion defaultExpanded={false}>
-              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                <Typography>
-                  <BelarusianText belarusian="Групы" russian="Группы" />
-                </Typography>
-              </AccordionSummary>
-              <AccordionDetails>
-                <Groups authenticatedFetch={authenticatedFetch} />
-              </AccordionDetails>
-            </Accordion>
-
-            <Accordion defaultExpanded={false}>
-              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                <Typography>
-                  <BelarusianText
-                    belarusian="Выкладчыкі"
-                    russian="Преподаватели"
-                  />
-                </Typography>
-              </AccordionSummary>
-              <AccordionDetails>
-                <Teachers
-                  authenticatedFetch={authenticatedFetch}
-                />
-              </AccordionDetails>
-            </Accordion>
-          </Box>
-        </Container>
-      </Box>
+      <AppRouter authenticatedFetch={authenticatedFetch} onLogout={handleLogout} />
     </ThemeProvider>
   )
 }
