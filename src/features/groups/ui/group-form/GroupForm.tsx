@@ -1,32 +1,20 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   Alert,
   Box,
   Button,
-  Chip,
   Dialog,
   DialogActions,
   DialogContent,
   FormControl,
-  IconButton,
   InputLabel,
   MenuItem,
   Select,
   Snackbar,
   TextField,
-  Tooltip,
   Typography,
 } from '@mui/material'
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
-import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
-import { DatePicker } from '@mui/x-date-pickers/DatePicker'
-import { TimePicker } from '@mui/x-date-pickers/TimePicker'
-import AddIcon from '@mui/icons-material/Add'
-import DeleteIcon from '@mui/icons-material/Delete'
-import EditIcon from '@mui/icons-material/Edit'
-import dayjs, { type Dayjs } from 'dayjs'
-import 'dayjs/locale/ru'
-import customParseFormat from 'dayjs/plugin/customParseFormat'
+import dayjs from 'dayjs'
 import { BelarusianText } from '../../../../components/BelarusianText'
 import { ConfirmDialog } from '../../../../components/ConfirmDialog'
 import { DialogTitleWithClose } from '../../../../shared/ui/dialog-title-with-close'
@@ -34,8 +22,10 @@ import type { Teacher } from '../../../../entities/teacher/model/types'
 import {
   deleteAttendanceRecords,
   loadAttendanceMapForGroup,
-  makeAttendanceKeyFromEntities,
   saveAttendanceRecords,
+  getScheduleAttendanceKeyPart,
+  getStudentAttendanceKeyPart,
+  makeAttendanceKey,
   type AuthenticatedFetch,
 } from '../../model/attendance'
 import type {
@@ -52,9 +42,20 @@ import {
   fetchTeachers,
   updateGroup,
 } from '../../api/groupsApi'
-
-dayjs.extend(customParseFormat)
-dayjs.locale('ru')
+import { StudentsInlineList } from './students-inline-list'
+import { ScheduleCalendar } from './schedule-calendar'
+import {
+  LessonDialog,
+  type LessonDialogInitialValues,
+  type LessonDialogMode,
+  type LessonDialogSavePayload,
+} from './lesson-dialog'
+import {
+  migrateStudentKeys,
+  removeAttendanceForSchedule,
+  removeAttendanceForStudent,
+} from '../../lib/group-form/attendanceKeyOps'
+import { getMonthLabel } from '../../lib/journal-calendar/monthLabels'
 
 export type GroupFormMode = 'create' | 'edit'
 
@@ -65,27 +66,6 @@ export interface GroupFormProps {
   authenticatedFetch: AuthenticatedFetch
   onDone: () => void
   onCancel: () => void
-}
-
-const formatDate = (dateString: string): string => {
-  const date = new Date(dateString)
-  return date.toLocaleDateString('ru-RU')
-}
-
-const formatTime = (timeString: string): string => {
-  return timeString.substring(0, 5)
-}
-
-const getAttendanceStatus = (
-  params: {
-    student: GroupStudent
-    schedule: GroupSchedule
-    attendanceMap: Map<string, AttendanceStatus>
-  }
-): AttendanceStatus | null => {
-  const { student, schedule, attendanceMap } = params
-  const key = makeAttendanceKeyFromEntities(student, schedule)
-  return attendanceMap.get(key) ?? null
 }
 
 const getInitialSnackbarState = (): {
@@ -124,15 +104,12 @@ export const GroupForm = (props: GroupFormProps) => {
     () => new Set()
   )
 
-  // Модальные окна (внутри формы)
-  const [openScheduleDialog, setOpenScheduleDialog] = useState(false)
+  // Модалки внутри формы
+  const [openLessonDialog, setOpenLessonDialog] = useState(false)
+  const [lessonDialogMode, setLessonDialogMode] = useState<LessonDialogMode>('create')
   const [editingScheduleIndex, setEditingScheduleIndex] = useState<number | null>(null)
-  const [scheduleDate, setScheduleDate] = useState<Dayjs | null>(null)
-  const [scheduleStartTime, setScheduleStartTime] = useState<Dayjs | null>(null)
-  const [scheduleEndTime, setScheduleEndTime] = useState<Dayjs | null>(null)
-  const [datePickerOpen, setDatePickerOpen] = useState(false)
-  const [startTimePickerOpen, setStartTimePickerOpen] = useState(false)
-  const [endTimePickerOpen, setEndTimePickerOpen] = useState(false)
+  const [lessonDialogInitialValues, setLessonDialogInitialValues] =
+    useState<LessonDialogInitialValues>({})
 
   const [openStudentDialog, setOpenStudentDialog] = useState(false)
   const [editingStudentIndex, setEditingStudentIndex] = useState<number | null>(null)
@@ -140,14 +117,13 @@ export const GroupForm = (props: GroupFormProps) => {
   const [studentEmail, setStudentEmail] = useState('')
   const [studentPhone, setStudentPhone] = useState('')
 
-  const [openAttendanceDialog, setOpenAttendanceDialog] = useState(false)
-  const [attendanceStudent, setAttendanceStudent] = useState<GroupStudent | null>(null)
-  const [attendanceSchedule, setAttendanceSchedule] = useState<GroupSchedule | null>(null)
-  const [attendanceStatus, setAttendanceStatus] =
-    useState<AttendanceEditStatus>('unset')
-
   const [openDeleteScheduleConfirm, setOpenDeleteScheduleConfirm] = useState(false)
   const [scheduleToDeleteIndex, setScheduleToDeleteIndex] = useState<number | null>(null)
+
+  const [openDeleteMonthConfirm, setOpenDeleteMonthConfirm] = useState(false)
+  const [monthToDelete, setMonthToDelete] = useState<{ year: number; monthIndex0: number } | null>(
+    null
+  )
 
   const [snackbar, setSnackbar] = useState(getInitialSnackbarState)
 
@@ -237,48 +213,64 @@ export const GroupForm = (props: GroupFormProps) => {
     return true
   }
 
-  // Schedule handlers
-  const handleAddSchedule = () => {
+  const defaultLessonTimes = useMemo((): { startTime?: string; endTime?: string } => {
+    if (schedules.length === 0) return {}
+    const sorted = [...schedules].sort((a, b) => {
+      if (a.date !== b.date) return a.date.localeCompare(b.date)
+      if (a.startTime !== b.startTime) return a.startTime.localeCompare(b.startTime)
+      return a.endTime.localeCompare(b.endTime)
+    })
+    const last = sorted[sorted.length - 1]
+    return last ? { startTime: last.startTime, endTime: last.endTime } : {}
+  }, [schedules])
+
+  const buildStatusesForSchedule = (schedule: GroupSchedule): Record<string, AttendanceEditStatus> => {
+    const schedulePart = getScheduleAttendanceKeyPart(schedule)
+    const record: Record<string, AttendanceEditStatus> = {}
+    for (const student of students) {
+      const studentPart = getStudentAttendanceKeyPart(student)
+      const key = makeAttendanceKey(studentPart, schedulePart)
+      record[studentPart] = attendanceMap.get(key) ?? 'unset'
+    }
+    return record
+  }
+
+  const findScheduleIndex = (schedule: GroupSchedule): number => {
+    if (typeof schedule.id === 'number') {
+      const idx = schedules.findIndex((s) => s.id === schedule.id)
+      if (idx >= 0) return idx
+    }
+    const signature = getScheduleAttendanceKeyPart(schedule)
+    return schedules.findIndex((s) => getScheduleAttendanceKeyPart(s) === signature)
+  }
+
+  const handleOpenAddLessonDialog = (params?: { isoDate?: string }) => {
+    setLessonDialogMode('create')
     setEditingScheduleIndex(null)
-    setScheduleDate(null)
-    setScheduleStartTime(null)
-    setScheduleEndTime(null)
-    setDatePickerOpen(false)
-    setStartTimePickerOpen(false)
-    setEndTimePickerOpen(false)
-    setOpenScheduleDialog(true)
+    setLessonDialogInitialValues({
+      defaultDateIso: params?.isoDate,
+      defaultStartTime: defaultLessonTimes.startTime,
+      defaultEndTime: defaultLessonTimes.endTime,
+      defaultIsTrialLesson: false,
+      defaultComment: '',
+      defaultStatusesByStudentKeyPart: {},
+    })
+    setOpenLessonDialog(true)
   }
 
-  const handleEditSchedule = (index: number) => {
+  const handleOpenEditLessonDialog = (params: { schedule: GroupSchedule }) => {
+    const index = findScheduleIndex(params.schedule)
+    if (index < 0) return
     const schedule = schedules[index]
+
+    setLessonDialogMode('edit')
     setEditingScheduleIndex(index)
-    setScheduleDate(dayjs(schedule.date))
-    setScheduleStartTime(dayjs(schedule.startTime, 'HH:mm'))
-    setScheduleEndTime(dayjs(schedule.endTime, 'HH:mm'))
-    setDatePickerOpen(false)
-    setStartTimePickerOpen(false)
-    setEndTimePickerOpen(false)
-    setOpenScheduleDialog(true)
-  }
-
-  const handleSaveSchedule = () => {
-    if (!scheduleDate || !scheduleStartTime || !scheduleEndTime) return
-
-    const newSchedule: GroupSchedule = {
-      date: scheduleDate.format('YYYY-MM-DD'),
-      startTime: scheduleStartTime.format('HH:mm'),
-      endTime: scheduleEndTime.format('HH:mm'),
-    }
-
-    if (editingScheduleIndex !== null) {
-      const updated = [...schedules]
-      updated[editingScheduleIndex] = newSchedule
-      setSchedules(updated)
-    } else {
-      setSchedules((prev) => [...prev, newSchedule])
-    }
-
-    setOpenScheduleDialog(false)
+    setLessonDialogInitialValues({
+      schedule,
+      defaultComment: schedule.comment ?? '',
+      defaultStatusesByStudentKeyPart: buildStatusesForSchedule(schedule),
+    })
+    setOpenLessonDialog(true)
   }
 
   const handleDeleteSchedule = (index: number) => {
@@ -288,9 +280,76 @@ export const GroupForm = (props: GroupFormProps) => {
 
   const handleConfirmDeleteSchedule = () => {
     if (scheduleToDeleteIndex === null) return
+
+    const schedule = schedules[scheduleToDeleteIndex]
+    if (!schedule) return
+
+    const attendanceRemoved = removeAttendanceForSchedule({
+      students,
+      schedule,
+      attendanceMap,
+      unsetAttendanceKeys,
+    })
+
+    setAttendanceMap(attendanceRemoved.attendanceMap)
+    setUnsetAttendanceKeys(attendanceRemoved.unsetAttendanceKeys)
     setSchedules((prev) => prev.filter((_, i) => i !== scheduleToDeleteIndex))
+
     setOpenDeleteScheduleConfirm(false)
     setScheduleToDeleteIndex(null)
+  }
+
+  const handleDeleteScheduleFromEntity = (params: { schedule: GroupSchedule }) => {
+    const index = findScheduleIndex(params.schedule)
+    if (index < 0) return
+    handleDeleteSchedule(index)
+  }
+
+  const handleOpenDeleteMonth = (params: { year: number; monthIndex0: number }) => {
+    setMonthToDelete(params)
+    setOpenDeleteMonthConfirm(true)
+  }
+
+  const handleConfirmDeleteMonth = () => {
+    if (!monthToDelete) return
+    const { year, monthIndex0 } = monthToDelete
+
+    const schedulesToRemove = schedules.filter((s) => {
+      const d = dayjs(s.date)
+      return d.isValid() && d.year() === year && d.month() === monthIndex0
+    })
+
+    if (schedulesToRemove.length === 0) {
+      setOpenDeleteMonthConfirm(false)
+      setMonthToDelete(null)
+      return
+    }
+
+    let nextAttendanceMap = new Map(attendanceMap)
+    let nextUnsetKeys = new Set(unsetAttendanceKeys)
+
+    for (const schedule of schedulesToRemove) {
+      const removed = removeAttendanceForSchedule({
+        students,
+        schedule,
+        attendanceMap: nextAttendanceMap,
+        unsetAttendanceKeys: nextUnsetKeys,
+      })
+      nextAttendanceMap = removed.attendanceMap
+      nextUnsetKeys = removed.unsetAttendanceKeys
+    }
+
+    setAttendanceMap(nextAttendanceMap)
+    setUnsetAttendanceKeys(nextUnsetKeys)
+    setSchedules((prev) =>
+      prev.filter((s) => {
+        const d = dayjs(s.date)
+        return !(d.isValid() && d.year() === year && d.month() === monthIndex0)
+      })
+    )
+
+    setOpenDeleteMonthConfirm(false)
+    setMonthToDelete(null)
   }
 
   // Student handlers
@@ -322,8 +381,21 @@ export const GroupForm = (props: GroupFormProps) => {
 
     if (editingStudentIndex !== null) {
       const updated = [...students]
+      const prevStudent = updated[editingStudentIndex]
       updated[editingStudentIndex] = newStudent
       setStudents(updated)
+
+      if (prevStudent) {
+        const migrated = migrateStudentKeys({
+          schedules,
+          fromStudent: prevStudent,
+          toStudent: newStudent,
+          attendanceMap,
+          unsetAttendanceKeys,
+        })
+        setAttendanceMap(migrated.attendanceMap)
+        setUnsetAttendanceKeys(migrated.unsetAttendanceKeys)
+      }
     } else {
       setStudents((prev) => [...prev, newStudent])
     }
@@ -332,50 +404,109 @@ export const GroupForm = (props: GroupFormProps) => {
   }
 
   const handleDeleteStudent = (index: number) => {
+    const student = students[index]
+    if (!student) return
+
+    const removed = removeAttendanceForStudent({
+      schedules,
+      student,
+      attendanceMap,
+      unsetAttendanceKeys,
+    })
+    setAttendanceMap(removed.attendanceMap)
+    setUnsetAttendanceKeys(removed.unsetAttendanceKeys)
     setStudents((prev) => prev.filter((_, i) => i !== index))
   }
 
-  // Attendance handlers
-  const handleOpenAttendanceDialog = (student: GroupStudent, schedule: GroupSchedule) => {
-    setAttendanceStudent(student)
-    setAttendanceSchedule(schedule)
-    const key = makeAttendanceKeyFromEntities(student, schedule)
-    const existingStatus: AttendanceEditStatus = attendanceMap.get(key) ?? 'unset'
-    setAttendanceStatus(existingStatus)
-    setOpenAttendanceDialog(true)
-  }
+  const handleSaveLesson = (payload: LessonDialogSavePayload) => {
+    const { schedule: nextSchedule, statusesByStudentKeyPart } = payload
 
-  const handleSaveAttendance = () => {
-    if (!attendanceStudent || !attendanceSchedule) return
+    // Edit existing schedule
+    if (editingScheduleIndex !== null) {
+      const prevSchedule = schedules[editingScheduleIndex]
+      if (!prevSchedule) return
 
-    const key = makeAttendanceKeyFromEntities(attendanceStudent, attendanceSchedule)
+      const prevPart = getScheduleAttendanceKeyPart(prevSchedule)
+      const nextPart = getScheduleAttendanceKeyPart(nextSchedule)
+      const scheduleChanged = prevPart !== nextPart
 
-    if (attendanceStatus === 'unset') {
-      setAttendanceMap((prev) => {
-        const next = new Map(prev)
-        next.delete(key)
-        return next
+      setSchedules((prev) => {
+        const updated = [...prev]
+        updated[editingScheduleIndex] = nextSchedule
+        return updated
       })
-      setUnsetAttendanceKeys((prev) => {
-        const next = new Set(prev)
-        next.add(key)
-        return next
-      })
-      setOpenAttendanceDialog(false)
+
+      let nextMap = new Map(attendanceMap)
+      let nextUnset = new Set(unsetAttendanceKeys)
+
+      if (scheduleChanged) {
+        const removed = removeAttendanceForSchedule({
+          students,
+          schedule: prevSchedule,
+          attendanceMap: nextMap,
+          unsetAttendanceKeys: nextUnset,
+        })
+        nextMap = removed.attendanceMap
+        nextUnset = removed.unsetAttendanceKeys
+
+        // Re-apply new statuses under new signature (no need to track deletes: schedule will be recreated on save)
+        for (const student of students) {
+          const studentPart = getStudentAttendanceKeyPart(student)
+          const desired = statusesByStudentKeyPart[studentPart] ?? 'unset'
+          const key = makeAttendanceKey(studentPart, nextPart)
+          nextUnset.delete(key)
+          if (desired === 'unset') {
+            nextMap.delete(key)
+            continue
+          }
+          nextMap.set(key, desired)
+        }
+      } else {
+        for (const student of students) {
+          const studentPart = getStudentAttendanceKeyPart(student)
+          const key = makeAttendanceKey(studentPart, nextPart)
+          const desired = statusesByStudentKeyPart[studentPart] ?? 'unset'
+          const existing = nextMap.get(key) ?? null
+
+          if (desired === 'unset') {
+            if (existing) {
+              nextMap.delete(key)
+              nextUnset.add(key)
+            }
+            continue
+          }
+
+          nextMap.set(key, desired)
+          nextUnset.delete(key)
+        }
+      }
+
+      setAttendanceMap(nextMap)
+      setUnsetAttendanceKeys(nextUnset)
+      setOpenLessonDialog(false)
       return
     }
 
-    setAttendanceMap((prev) => {
-      const next = new Map(prev)
-      next.set(key, attendanceStatus)
-      return next
-    })
-    setUnsetAttendanceKeys((prev) => {
-      const next = new Set(prev)
-      next.delete(key)
-      return next
-    })
-    setOpenAttendanceDialog(false)
+    // Create new schedule
+    setSchedules((prev) => [...prev, nextSchedule])
+
+    const schedulePart = getScheduleAttendanceKeyPart(nextSchedule)
+
+    const nextMap = new Map(attendanceMap)
+    const nextUnset = new Set(unsetAttendanceKeys)
+
+    for (const student of students) {
+      const studentPart = getStudentAttendanceKeyPart(student)
+      const desired = statusesByStudentKeyPart[studentPart] ?? 'unset'
+      const key = makeAttendanceKey(studentPart, schedulePart)
+      nextUnset.delete(key)
+      if (desired === 'unset') continue
+      nextMap.set(key, desired)
+    }
+
+    setAttendanceMap(nextMap)
+    setUnsetAttendanceKeys(nextUnset)
+    setOpenLessonDialog(false)
   }
 
   const handleSubmit = async () => {
@@ -475,8 +606,7 @@ export const GroupForm = (props: GroupFormProps) => {
   }
 
   return (
-    <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="ru">
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
           <Typography variant="h5" component="h2">
             {title}
@@ -570,273 +700,35 @@ export const GroupForm = (props: GroupFormProps) => {
             </Select>
           </FormControl>
 
-          {/* График */}
-          <Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-              <Typography variant="subtitle1">
-                <BelarusianText belarusian="Графік" russian="График" />
-              </Typography>
-              <Tooltip title="Дадаць занятак">
-                <IconButton
-                  aria-label="Дадаць занятак"
-                  size="small"
-                  color="primary"
-                  onClick={handleAddSchedule}
-                  disabled={loading}
-                >
-                  <AddIcon />
-                </IconButton>
-              </Tooltip>
-            </Box>
-
-            {schedules.length === 0 ? (
-              <Typography variant="body2" color="text.secondary">
-                <BelarusianText
-                  belarusian="Графік не дададзены"
-                  russian="График не добавлен"
-                />
-              </Typography>
-            ) : (
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                {schedules.map((schedule, index) => (
-                  <Box
-                    key={`${schedule.date}-${schedule.startTime}-${schedule.endTime}-${index}`}
-                    sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 1,
-                      p: 1,
-                      border: '1px solid',
-                      borderColor: 'divider',
-                      borderRadius: 1,
-                      flexWrap: 'wrap',
-                    }}
-                  >
-                    <Typography variant="body2" sx={{ flexGrow: 1 }}>
-                      {formatDate(schedule.date)} {formatTime(schedule.startTime)} -{' '}
-                      {formatTime(schedule.endTime)}
-                    </Typography>
-                    <IconButton
-                      aria-label="Рэдагаваць занятак"
-                      size="small"
-                      onClick={() => handleEditSchedule(index)}
-                      color="primary"
-                      disabled={loading}
-                    >
-                      <EditIcon fontSize="small" />
-                    </IconButton>
-                    <IconButton
-                      aria-label="Выдаліць занятак"
-                      size="small"
-                      onClick={() => handleDeleteSchedule(index)}
-                      color="error"
-                      disabled={loading}
-                    >
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  </Box>
-                ))}
-              </Box>
-            )}
-          </Box>
-
           {/* Студенты */}
-          <Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-              <Typography variant="subtitle1">
-                <BelarusianText belarusian="Студенты" russian="Студенты" />
-              </Typography>
-              <Tooltip title="Дадаць студента">
-                <IconButton
-                  aria-label="Дадаць студента"
-                  size="small"
-                  color="primary"
-                  onClick={handleAddStudent}
-                  disabled={loading}
-                >
-                  <AddIcon />
-                </IconButton>
-              </Tooltip>
-            </Box>
+          <StudentsInlineList
+            students={students}
+            disabled={loading}
+            onAddStudent={handleAddStudent}
+            onEditStudent={handleEditStudent}
+            onDeleteStudent={handleDeleteStudent}
+          />
 
-            {students.length === 0 ? (
-              <Typography variant="body2" color="text.secondary">
-                <BelarusianText
-                  belarusian="Студэнты не дададзены"
-                  russian="Студенты не добавлены"
-                />
-              </Typography>
-            ) : (
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                {students.map((student, index) => (
-                  <Box
-                    key={`${student.fullName}-${index}`}
-                    sx={{
-                      p: 1,
-                      border: '1px solid',
-                      borderColor: 'divider',
-                      borderRadius: 1,
-                    }}
-                  >
-                    <Box
-                      sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 1,
-                        mb: schedules.length > 0 ? 1 : 0,
-                      }}
-                    >
-                      <Typography variant="body2" sx={{ flexGrow: 1 }}>
-                        {student.fullName}
-                      </Typography>
-                      <IconButton
-                        aria-label="Рэдагаваць студента"
-                        size="small"
-                        onClick={() => handleEditStudent(index)}
-                        color="primary"
-                        disabled={loading}
-                      >
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                      <IconButton
-                        aria-label="Выдаліць студента"
-                        size="small"
-                        onClick={() => handleDeleteStudent(index)}
-                        color="error"
-                        disabled={loading}
-                      >
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </Box>
-
-                    {schedules.length > 0 && (
-                      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                        {schedules.map((schedule, scheduleIndex) => {
-                          const status = getAttendanceStatus({
-                            student,
-                            schedule,
-                            attendanceMap,
-                          })
-                          return (
-                            <Chip
-                              key={`${schedule.date}-${schedule.startTime}-${schedule.endTime}-${scheduleIndex}`}
-                              label={formatDate(schedule.date)}
-                              size="small"
-                              onClick={() => handleOpenAttendanceDialog(student, schedule)}
-                              sx={{
-                                cursor: 'pointer',
-                                backgroundColor:
-                                  status === 'absent'
-                                    ? 'orange'
-                                    : status === 'present'
-                                      ? 'green'
-                                      : 'grey.300',
-                                color: status ? 'white' : 'inherit',
-                                '&:hover': {
-                                  backgroundColor:
-                                    status === 'absent'
-                                      ? 'orange'
-                                      : status === 'present'
-                                        ? 'green'
-                                        : 'grey.400',
-                                  opacity: 0.8,
-                                },
-                              }}
-                            />
-                          )
-                        })}
-                      </Box>
-                    )}
-                  </Box>
-                ))}
-              </Box>
-            )}
-          </Box>
+          {/* Графік */}
+          <ScheduleCalendar
+            schedules={schedules}
+            disabled={loading}
+            onAddLesson={handleOpenAddLessonDialog}
+            onEditLesson={handleOpenEditLessonDialog}
+            onDeleteLesson={handleDeleteScheduleFromEntity}
+            onDeleteMonth={handleOpenDeleteMonth}
+          />
         </Box>
 
-        {/* Диалог добавления/редактирования занятия */}
-        <Dialog
-          open={openScheduleDialog}
-          onClose={() => setOpenScheduleDialog(false)}
-          maxWidth="sm"
-          fullWidth
-        >
-          <DialogTitleWithClose onClose={() => setOpenScheduleDialog(false)}>
-            <BelarusianText
-              belarusian={
-                editingScheduleIndex !== null ? 'Рэдагаваць занятак' : 'Дадаць занятак'
-              }
-              russian={
-                editingScheduleIndex !== null
-                  ? 'Редактировать занятие'
-                  : 'Добавить занятие'
-              }
-            />
-          </DialogTitleWithClose>
-          <DialogContent>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
-              <DatePicker
-                label="Дата"
-                value={scheduleDate}
-                onChange={(newValue) => setScheduleDate(newValue)}
-                open={datePickerOpen}
-                onOpen={() => setDatePickerOpen(true)}
-                onClose={() => setDatePickerOpen(false)}
-                slotProps={{
-                  textField: {
-                    fullWidth: true,
-                    required: true,
-                    onClick: () => setDatePickerOpen(true),
-                  },
-                }}
-              />
-              <TimePicker
-                label="Час пачатку"
-                value={scheduleStartTime}
-                onChange={(newValue) => setScheduleStartTime(newValue)}
-                open={startTimePickerOpen}
-                onOpen={() => setStartTimePickerOpen(true)}
-                onClose={() => setStartTimePickerOpen(false)}
-                ampm={false}
-                slotProps={{
-                  textField: {
-                    fullWidth: true,
-                    required: true,
-                    onClick: () => setStartTimePickerOpen(true),
-                  },
-                }}
-              />
-              <TimePicker
-                label="Час заканчэння"
-                value={scheduleEndTime}
-                onChange={(newValue) => setScheduleEndTime(newValue)}
-                open={endTimePickerOpen}
-                onOpen={() => setEndTimePickerOpen(true)}
-                onClose={() => setEndTimePickerOpen(false)}
-                ampm={false}
-                slotProps={{
-                  textField: {
-                    fullWidth: true,
-                    required: true,
-                    onClick: () => setEndTimePickerOpen(true),
-                  },
-                }}
-              />
-            </Box>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setOpenScheduleDialog(false)}>
-              <BelarusianText belarusian="Адмена" russian="Отмена" />
-            </Button>
-            <Button
-              onClick={handleSaveSchedule}
-              variant="contained"
-              disabled={!scheduleDate || !scheduleStartTime || !scheduleEndTime}
-            >
-              <BelarusianText belarusian="Захаваць" russian="Сохранить" />
-            </Button>
-          </DialogActions>
-        </Dialog>
+        <LessonDialog
+          open={openLessonDialog}
+          disabled={loading}
+          mode={lessonDialogMode}
+          students={students}
+          initialValues={lessonDialogInitialValues}
+          onClose={() => setOpenLessonDialog(false)}
+          onSave={handleSaveLesson}
+        />
 
         {/* Диалог добавления/редактирования студента */}
         <Dialog
@@ -896,86 +788,6 @@ export const GroupForm = (props: GroupFormProps) => {
           </DialogActions>
         </Dialog>
 
-        {/* Диалог изменения посещаемости */}
-        <Dialog
-          open={openAttendanceDialog}
-          onClose={() => setOpenAttendanceDialog(false)}
-          maxWidth="sm"
-          fullWidth
-        >
-          <DialogTitleWithClose onClose={() => setOpenAttendanceDialog(false)}>
-            <BelarusianText
-              belarusian="Змена звестак пра наведванне"
-              russian="Изменение сведений о посещаемости"
-            />
-          </DialogTitleWithClose>
-          <DialogContent>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
-              {attendanceStudent && (
-                <TextField
-                  label="ПІБ студэнта"
-                  value={attendanceStudent.fullName}
-                  disabled
-                  fullWidth
-                />
-              )}
-              {attendanceSchedule && (
-                <>
-                  <TextField
-                    label="Дата"
-                    value={formatDate(attendanceSchedule.date)}
-                    disabled
-                    fullWidth
-                  />
-                  <TextField
-                    label="Час заняткаў"
-                    value={`${formatTime(attendanceSchedule.startTime)} - ${formatTime(
-                      attendanceSchedule.endTime
-                    )}`}
-                    disabled
-                    fullWidth
-                  />
-                </>
-              )}
-              <FormControl fullWidth>
-                <InputLabel id="attendance-status-label">Статус</InputLabel>
-                <Select
-                  labelId="attendance-status-label"
-                  value={attendanceStatus}
-                  label="Статус"
-                  onChange={(e) =>
-                    setAttendanceStatus(e.target.value as AttendanceEditStatus)
-                  }
-                >
-                  <MenuItem value="unset">
-                    <BelarusianText
-                      belarusian="Не ўсталявана"
-                      russian="Не установлено"
-                    />
-                  </MenuItem>
-                  <MenuItem value="present">
-                    <BelarusianText
-                      belarusian="Прысутнічаў"
-                      russian="Присутствовал"
-                    />
-                  </MenuItem>
-                  <MenuItem value="absent">
-                    <BelarusianText belarusian="Адсутнічаў" russian="Отсутствовал" />
-                  </MenuItem>
-                </Select>
-              </FormControl>
-            </Box>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setOpenAttendanceDialog(false)}>
-              <BelarusianText belarusian="Адмена" russian="Отмена" />
-            </Button>
-            <Button onClick={handleSaveAttendance} variant="contained">
-              <BelarusianText belarusian="Захаваць" russian="Сохранить" />
-            </Button>
-          </DialogActions>
-        </Dialog>
-
         {/* Подтверждение удаления занятия */}
         <ConfirmDialog
           open={openDeleteScheduleConfirm}
@@ -988,6 +800,32 @@ export const GroupForm = (props: GroupFormProps) => {
             <BelarusianText belarusian="Выдаліць занятак?" russian="Удалить занятие?" />
           }
           message="Вы сапраўды хочаце выдаліць гэта занятак?"
+          confirmText={<BelarusianText belarusian="Выдаліць" russian="Удалить" />}
+          cancelText={<BelarusianText belarusian="Адмена" russian="Отмена" />}
+          confirmColor="error"
+        />
+
+        {/* Подтверждение удаления месяца */}
+        <ConfirmDialog
+          open={openDeleteMonthConfirm}
+          onClose={() => {
+            setOpenDeleteMonthConfirm(false)
+            setMonthToDelete(null)
+          }}
+          onConfirm={handleConfirmDeleteMonth}
+          title={
+            <BelarusianText belarusian="Выдаліць месяц?" russian="Удалить месяц?" />
+          }
+          message={
+            monthToDelete ? (
+              (() => {
+                const label = getMonthLabel(monthToDelete)
+                return `Вы уверены что хотите удалить ${label.russian}?`
+              })()
+            ) : (
+              ''
+            )
+          }
           confirmText={<BelarusianText belarusian="Выдаліць" russian="Удалить" />}
           cancelText={<BelarusianText belarusian="Адмена" russian="Отмена" />}
           confirmColor="error"
@@ -1008,8 +846,7 @@ export const GroupForm = (props: GroupFormProps) => {
             {snackbar.message}
           </Alert>
         </Snackbar>
-      </Box>
-    </LocalizationProvider>
+    </Box>
   )
 }
 

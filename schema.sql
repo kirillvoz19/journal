@@ -64,6 +64,8 @@ CREATE TABLE IF NOT EXISTS group_schedules (
   date TEXT NOT NULL,
   startTime TEXT NOT NULL,
   endTime TEXT NOT NULL,
+  isTrialLesson INTEGER NOT NULL DEFAULT 0,
+  comment TEXT,
   createdAt TEXT NOT NULL DEFAULT (datetime('now')),
   FOREIGN KEY (groupId) REFERENCES groups(id) ON DELETE CASCADE
 );

@@ -37,6 +37,21 @@ database_id = "ваш-database-id"
 npx wrangler d1 execute journal-db2 --local --file=./schema.sql
 
 ```
+Если база уже существует и вы обновляете схему (например, после добавления новых колонок), примените миграцию вручную:
+
+```bash
+# Добавить колонку "пробный урок" в расписание занятий (локально)
+npx wrangler d1 execute journal-db2 --local --command="ALTER TABLE group_schedules ADD COLUMN isTrialLesson INTEGER NOT NULL DEFAULT 0;"
+
+# Добавить колонку "комментарий" к занятию (локально)
+npx wrangler d1 execute journal-db2 --local --command="ALTER TABLE group_schedules ADD COLUMN comment TEXT;"
+
+# То же самое для продакшн базы
+npx wrangler d1 execute journal-db2 --remote --command="ALTER TABLE group_schedules ADD COLUMN isTrialLesson INTEGER NOT NULL DEFAULT 0;"
+
+# То же самое для продакшн базы
+npx wrangler d1 execute journal-db2 --remote --command="ALTER TABLE group_schedules ADD COLUMN comment TEXT;"
+```
 и для локальной разработки нужно запустить скрипт для генерации хеша пароля админа
 
 ```bash

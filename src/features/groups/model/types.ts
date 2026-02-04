@@ -6,6 +6,8 @@ export interface GroupSchedule {
   date: string
   startTime: string
   endTime: string
+  isTrialLesson?: boolean
+  comment?: string
 }
 
 export interface GroupStudent {

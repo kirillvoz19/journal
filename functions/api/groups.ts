@@ -24,8 +24,26 @@ interface GroupSchedule {
   date: string
   startTime: string
   endTime: string
+  isTrialLesson?: boolean
+  comment?: string
   createdAt?: string
 }
+
+type DbBoolean = number | string | boolean | null
+
+type GroupScheduleDbRow = Omit<GroupSchedule, 'isTrialLesson'> & { isTrialLesson: DbBoolean }
+
+const parseDbBoolean = (value: DbBoolean): boolean => {
+  if (value === null) return false
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'number') return value === 1
+  return value === '1'
+}
+
+const mapScheduleDbRowToApi = (row: GroupScheduleDbRow): GroupSchedule => ({
+  ...row,
+  isTrialLesson: parseDbBoolean(row.isTrialLesson),
+})
 
 interface GroupStudent {
   id?: number
@@ -36,15 +54,7 @@ interface GroupStudent {
   createdAt?: string
 }
 
-interface Attendance {
-  id?: number
-  studentId: number
-  scheduleId: number
-  status: 'present' | 'absent'
-  createdAt?: string
-}
-
-// @ts-ignore
+// @ts-expect-error requireAuth wraps handler types for PagesFunction
 export const onRequestGet: PagesFunction<Env> = requireAuth(async (context) => {
   const { env } = context
 
@@ -69,12 +79,14 @@ export const onRequestGet: PagesFunction<Env> = requireAuth(async (context) => {
     // Load schedules and students for each group
     for (const group of groups) {
       const schedulesResult = await env.DB.prepare(
-        'SELECT id, groupId, date, startTime, endTime, createdAt FROM group_schedules WHERE groupId = ? ORDER BY date, startTime'
+        'SELECT id, groupId, date, startTime, endTime, isTrialLesson, comment, createdAt FROM group_schedules WHERE groupId = ? ORDER BY date, startTime'
       )
         .bind(group.id)
         .all()
 
-      group.schedules = (schedulesResult.results || []) as GroupSchedule[]
+      group.schedules = ((schedulesResult.results || []) as GroupScheduleDbRow[]).map(
+        mapScheduleDbRowToApi
+      )
 
       const studentsResult = await env.DB.prepare(
         'SELECT id, groupId, fullName, email, phone, createdAt FROM group_students WHERE groupId = ? ORDER BY id'
@@ -100,7 +112,7 @@ export const onRequestGet: PagesFunction<Env> = requireAuth(async (context) => {
   }
 })
 
-// @ts-ignore
+// @ts-expect-error requireAuth wraps handler types for PagesFunction
 export const onRequestPost: PagesFunction<Env> = requireAuth(async (context) => {
   const { env, request } = context
 
@@ -155,13 +167,15 @@ export const onRequestPost: PagesFunction<Env> = requireAuth(async (context) => 
     if (body.schedules && body.schedules.length > 0) {
       for (const schedule of body.schedules) {
         await env.DB.prepare(
-          'INSERT INTO group_schedules (groupId, date, startTime, endTime, createdAt) VALUES (?, ?, ?, ?, ?)'
+          'INSERT INTO group_schedules (groupId, date, startTime, endTime, isTrialLesson, comment, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)'
         )
           .bind(
             groupId,
             schedule.date,
             schedule.startTime,
             schedule.endTime,
+            schedule.isTrialLesson ? 1 : 0,
+            schedule.comment || null,
             new Date().toISOString()
           )
           .run()
@@ -193,12 +207,14 @@ export const onRequestPost: PagesFunction<Env> = requireAuth(async (context) => 
       .first() as Group
 
     const schedulesResult = await env.DB.prepare(
-      'SELECT id, groupId, date, startTime, endTime, createdAt FROM group_schedules WHERE groupId = ? ORDER BY date, startTime'
+      'SELECT id, groupId, date, startTime, endTime, isTrialLesson, comment, createdAt FROM group_schedules WHERE groupId = ? ORDER BY date, startTime'
     )
       .bind(groupId)
       .all()
 
-    group.schedules = (schedulesResult.results || []) as GroupSchedule[]
+    group.schedules = ((schedulesResult.results || []) as GroupScheduleDbRow[]).map(
+      mapScheduleDbRowToApi
+    )
 
     const studentsResult = await env.DB.prepare(
       'SELECT id, groupId, fullName, email, phone, createdAt FROM group_students WHERE groupId = ? ORDER BY id'
@@ -212,7 +228,7 @@ export const onRequestPost: PagesFunction<Env> = requireAuth(async (context) => 
       status: 201,
       headers: { 'Content-Type': 'application/json' },
     })
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error creating group:', error)
     return new Response(
       JSON.stringify({ error: 'Failed to create group' }),
@@ -224,7 +240,7 @@ export const onRequestPost: PagesFunction<Env> = requireAuth(async (context) => 
   }
 })
 
-// @ts-ignore
+// @ts-expect-error requireAuth wraps handler types for PagesFunction
 export const onRequestPut: PagesFunction<Env> = requireAuth(async (context) => {
   const { env, request } = context
 
@@ -261,7 +277,7 @@ export const onRequestPut: PagesFunction<Env> = requireAuth(async (context) => {
     }
 
     const updates: string[] = []
-    const values: any[] = []
+    const values: Array<string | number | null> = []
 
     if (body.name) {
       updates.push('name = ?')
@@ -314,13 +330,15 @@ export const onRequestPut: PagesFunction<Env> = requireAuth(async (context) => {
       if (body.schedules.length > 0) {
         for (const schedule of body.schedules) {
           await env.DB.prepare(
-            'INSERT INTO group_schedules (groupId, date, startTime, endTime, createdAt) VALUES (?, ?, ?, ?, ?)'
+            'INSERT INTO group_schedules (groupId, date, startTime, endTime, isTrialLesson, comment, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)'
           )
             .bind(
               body.id,
               schedule.date,
               schedule.startTime,
               schedule.endTime,
+              schedule.isTrialLesson ? 1 : 0,
+              schedule.comment || null,
               new Date().toISOString()
             )
             .run()
@@ -361,12 +379,14 @@ export const onRequestPut: PagesFunction<Env> = requireAuth(async (context) => {
       .first() as Group
 
     const schedulesResult = await env.DB.prepare(
-      'SELECT id, groupId, date, startTime, endTime, createdAt FROM group_schedules WHERE groupId = ? ORDER BY date, startTime'
+      'SELECT id, groupId, date, startTime, endTime, isTrialLesson, comment, createdAt FROM group_schedules WHERE groupId = ? ORDER BY date, startTime'
     )
       .bind(body.id)
       .all()
 
-    group.schedules = (schedulesResult.results || []) as GroupSchedule[]
+    group.schedules = ((schedulesResult.results || []) as GroupScheduleDbRow[]).map(
+      mapScheduleDbRowToApi
+    )
 
     const studentsResult = await env.DB.prepare(
       'SELECT id, groupId, fullName, email, phone, createdAt FROM group_students WHERE groupId = ? ORDER BY id'
@@ -391,7 +411,7 @@ export const onRequestPut: PagesFunction<Env> = requireAuth(async (context) => {
   }
 })
 
-// @ts-ignore
+// @ts-expect-error requireAuth wraps handler types for PagesFunction
 export const onRequestDelete: PagesFunction<Env> = requireAuth(async (context) => {
   const { env, request } = context
 
