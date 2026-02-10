@@ -13,11 +13,14 @@ interface Teacher {
   passwordHash?: string
   fullName: string
   createdAt?: string
+  password?: string
 }
 
 // @ts-ignore
 export const onRequestGet: PagesFunction<Env> = requireAuth(async (context) => {
   const { env } = context
+  const user = (context as any).user as { id: number; username: string; role?: string } | undefined
+  const isAdmin = user?.role === 'admin'
 
   try {
     if (!env.DB) {
@@ -30,9 +33,10 @@ export const onRequestGet: PagesFunction<Env> = requireAuth(async (context) => {
       )
     }
 
-    const result = await env.DB.prepare(
-      'SELECT id, username, fullName, createdAt FROM teachers ORDER BY id'
-    ).all()
+    const query = isAdmin
+      ? 'SELECT id, username, fullName, createdAt, passwordPlaintext AS password FROM teachers ORDER BY id'
+      : 'SELECT id, username, fullName, createdAt FROM teachers ORDER BY id'
+    const result = await env.DB.prepare(query).all()
 
     const teachers = (result.results || []) as Teacher[]
 
@@ -86,9 +90,9 @@ export const onRequestPost: PagesFunction<Env> = requireAuth(async (context) => 
     const passwordHash = await hashPassword(body.password)
 
     const result = await env.DB.prepare(
-      'INSERT INTO teachers (username, passwordHash, fullName, createdAt) VALUES (?, ?, ?, ?)'
+      'INSERT INTO teachers (username, passwordHash, passwordPlaintext, fullName, createdAt) VALUES (?, ?, ?, ?, ?)'
     )
-      .bind(body.username, passwordHash, body.fullName, new Date().toISOString())
+      .bind(body.username, passwordHash, body.password, body.fullName, new Date().toISOString())
       .run()
 
     return new Response(
@@ -96,6 +100,7 @@ export const onRequestPost: PagesFunction<Env> = requireAuth(async (context) => 
         id: result.meta.last_row_id,
         username: body.username,
         fullName: body.fullName,
+        password: body.password,
       }),
       {
         status: 201,
@@ -159,8 +164,8 @@ export const onRequestPut: PagesFunction<Env> = requireAuth(async (context) => {
 
     if (body.password) {
       const passwordHash = await hashPassword(body.password)
-      updates.push('passwordHash = ?')
-      values.push(passwordHash)
+      updates.push('passwordHash = ?', 'passwordPlaintext = ?')
+      values.push(passwordHash, body.password)
     }
 
     if (body.fullName) {
@@ -196,10 +201,13 @@ export const onRequestPut: PagesFunction<Env> = requireAuth(async (context) => {
       )
     }
 
-    // Fetch updated teacher
-    const teacherResult = await env.DB.prepare(
-      'SELECT id, username, fullName, createdAt FROM teachers WHERE id = ?'
-    )
+    // Fetch updated teacher (include password for admin)
+    const user = (context as any).user as { id: number; username: string; role?: string } | undefined
+    const isAdmin = user?.role === 'admin'
+    const selectQuery = isAdmin
+      ? 'SELECT id, username, fullName, createdAt, passwordPlaintext AS password FROM teachers WHERE id = ?'
+      : 'SELECT id, username, fullName, createdAt FROM teachers WHERE id = ?'
+    const teacherResult = await env.DB.prepare(selectQuery)
       .bind(body.id)
       .first()
 

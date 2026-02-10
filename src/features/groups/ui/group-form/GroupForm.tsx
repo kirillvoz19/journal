@@ -151,7 +151,7 @@ export const GroupForm = (props: GroupFormProps) => {
   const fillFormFromGroup = (group: Group) => {
     setEditingGroup(group)
     setGroupName(group.name)
-    setSelectedTeacherId(group.teacherId)
+    setSelectedTeacherId(group.teacherId ?? '')
     setSelectedSubject(group.subject)
     setCustomSubject(group.customSubject || '')
     setSelectedLevel(group.level)
@@ -511,14 +511,15 @@ export const GroupForm = (props: GroupFormProps) => {
 
   const handleSubmit = async () => {
     if (!isFormValid()) return
-    if (!selectedTeacherId) return
-
     try {
       setLoading(true)
 
       const payload = {
         name: groupName.trim(),
-        teacherId: selectedTeacherId,
+        teacherId:
+          selectedTeacherId === '' || selectedTeacherId == null
+            ? null
+            : selectedTeacherId,
         subject: selectedSubject,
         customSubject:
           selectedSubject === 'Другой язык' ? customSubject.trim() : undefined,
@@ -641,14 +642,21 @@ export const GroupForm = (props: GroupFormProps) => {
             disabled={loading}
           />
 
-          <FormControl fullWidth required disabled={loading}>
+          <FormControl fullWidth disabled={loading}>
             <InputLabel id="teacher-select-label">Выкладчык</InputLabel>
             <Select
               labelId="teacher-select-label"
               value={selectedTeacherId}
               label="Выкладчык"
-              onChange={(e) => setSelectedTeacherId(e.target.value as number)}
+              onChange={(e) =>
+                setSelectedTeacherId(
+                  e.target.value === '' ? '' : (e.target.value as number)
+                )
+              }
             >
+              <MenuItem value="">
+                <em>Не паказана</em>
+              </MenuItem>
               {teachers.map((teacher) => (
                 <MenuItem key={teacher.id} value={teacher.id}>
                   {teacher.username} {teacher.fullName}

@@ -1,4 +1,4 @@
-import { Box, Button, Container, Typography } from '@mui/material'
+import { Box, Button, Container, Tooltip, Typography } from '@mui/material'
 import { Outlet } from 'react-router-dom'
 import { BelarusianText } from '../../components/BelarusianText'
 import type { AuthenticatedFetch } from '../../features/groups/model/attendance'
@@ -6,10 +6,42 @@ import type { AuthenticatedFetch } from '../../features/groups/model/attendance'
 export interface AuthenticatedLayoutProps {
   authenticatedFetch: AuthenticatedFetch
   onLogout: () => void
+  isAdmin: boolean
+  isTeacher: boolean
+  username: string
+}
+
+function HeaderTitle(props: { isAdmin: boolean; isTeacher: boolean; username: string }) {
+  const { isAdmin, isTeacher, username } = props
+  if (isAdmin) {
+    return (
+      <Tooltip title="Журнал администратора" arrow>
+        <Typography variant="h4" component="h1" sx={{ cursor: 'default' }}>
+          Журнал адміністратара
+        </Typography>
+      </Tooltip>
+    )
+  }
+  if (isTeacher && username) {
+    return (
+      <Tooltip title={`Журнал для учителя ${username}`} arrow>
+        <Typography variant="h4" component="h1" sx={{ cursor: 'default' }}>
+          Журнал для настаўніка {username}
+        </Typography>
+      </Tooltip>
+    )
+  }
+  return (
+    <Tooltip title="Журнал" arrow>
+      <Typography variant="h4" component="h1" sx={{ cursor: 'default' }}>
+        Журнал
+      </Typography>
+    </Tooltip>
+  )
 }
 
 export const AuthenticatedLayout = (props: AuthenticatedLayoutProps) => {
-  const { authenticatedFetch, onLogout } = props
+  const { authenticatedFetch, onLogout, isAdmin, isTeacher, username } = props
 
   return (
     <Box
@@ -27,15 +59,13 @@ export const AuthenticatedLayout = (props: AuthenticatedLayoutProps) => {
             mb: 3,
           }}
         >
-          <Typography variant="h4" component="h1">
-            <BelarusianText belarusian="Журнал" russian="Журнал" />
-          </Typography>
+          <HeaderTitle isAdmin={isAdmin} isTeacher={isTeacher} username={username} />
           <Button variant="outlined" onClick={onLogout}>
             <BelarusianText belarusian="Выйсці" russian="Выйти" />
           </Button>
         </Box>
 
-        <Outlet context={{ authenticatedFetch }} />
+        <Outlet context={{ authenticatedFetch, isAdmin, isTeacher }} />
       </Container>
     </Box>
   )

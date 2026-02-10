@@ -8,10 +8,13 @@ import { GroupEditPage } from '../../../pages/groups/edit/ui/GroupEditPage'
 export interface AppRouterProps {
   authenticatedFetch: AuthenticatedFetch
   onLogout: () => void
+  isAdmin: boolean
+  isTeacher: boolean
+  username: string
 }
 
 export const AppRouter = (props: AppRouterProps) => {
-  const { authenticatedFetch, onLogout } = props
+  const { authenticatedFetch, onLogout, isAdmin, isTeacher, username } = props
 
   return (
     <HashRouter>
@@ -22,6 +25,9 @@ export const AppRouter = (props: AppRouterProps) => {
             <AuthenticatedLayout
               authenticatedFetch={authenticatedFetch}
               onLogout={onLogout}
+              isAdmin={isAdmin}
+              isTeacher={isTeacher}
+              username={username}
             />
           }
         >

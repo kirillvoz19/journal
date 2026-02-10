@@ -6,10 +6,13 @@ export const enrichGroupWithTeacher = (params: {
   teachers: Teacher[]
 }): Group => {
   const { group, teachers } = params
-  const teacher = teachers.find((t) => t.id === group.teacherId)
+  const teacher =
+    group.teacherId != null
+      ? teachers.find((t) => t.id === group.teacherId)
+      : undefined
   return {
     ...group,
-    teacherFullName: teacher?.fullName || '',
+    teacherFullName: teacher?.fullName ?? '',
   }
 }
 

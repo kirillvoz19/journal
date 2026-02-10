@@ -14,6 +14,7 @@ const REFRESH_TOKEN_EXPIRY = 7 * 24 * 60 * 60 * 1000 // 7 дней
 interface JWTPayload {
   userId: number
   username: string
+  role?: string
   type: 'access' | 'refresh'
   exp: number
   iat: number
@@ -274,16 +275,26 @@ export function extractToken(request: Request): string | null {
 }
 
 // Создание access токена
-export async function createAccessToken(userId: number, username: string, secret?: string): Promise<string> {
-  return createJWT({ userId, username, type: 'access' }, ACCESS_TOKEN_EXPIRY, secret)
+export async function createAccessToken(
+  userId: number,
+  username: string,
+  secret?: string,
+  role?: string | null
+): Promise<string> {
+  return createJWT({ userId, username, role: role ?? undefined, type: 'access' }, ACCESS_TOKEN_EXPIRY, secret)
 }
 
 // Создание refresh токена
-export async function createRefreshToken(userId: number, username: string, secret?: string): Promise<string> {
-  return createJWT({ userId, username, type: 'refresh' }, REFRESH_TOKEN_EXPIRY, secret)
+export async function createRefreshToken(
+  userId: number,
+  username: string,
+  secret?: string,
+  role?: string | null
+): Promise<string> {
+  return createJWT({ userId, username, role: role ?? undefined, type: 'refresh' }, REFRESH_TOKEN_EXPIRY, secret)
 }
 
-// Сохранение refresh токена в БД
+// Сохранение refresh токена в БД (для пользователей users)
 export async function saveRefreshToken(
   db: D1Database,
   userId: number,
@@ -297,59 +308,95 @@ export async function saveRefreshToken(
     .run()
 }
 
-// Проверка refresh токена в БД
+// Сохранение refresh токена для преподавателя (teachers)
+export async function saveTeacherRefreshToken(
+  db: D1Database,
+  teacherId: number,
+  token: string
+): Promise<void> {
+  const expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRY).toISOString()
+  await db.prepare(
+    'INSERT INTO teacher_refresh_tokens (teacherId, token, expiresAt) VALUES (?, ?, ?)'
+  )
+    .bind(teacherId, token, expiresAt)
+    .run()
+}
+
+// Проверка refresh токена в БД (users или teachers)
 export async function verifyRefreshToken(
   db: D1Database,
   token: string,
   secret?: string
-): Promise<{ userId: number; username: string } | null> {
-  // Проверяем JWT
+): Promise<{ userId: number; username: string; role: string | null } | null> {
   const payload = await verifyJWT(token, secret)
   if (!payload || payload.type !== 'refresh') {
     return null
   }
 
-  // Проверяем наличие токена в БД
-  const result = await db.prepare(
+  // Сначала проверяем таблицу users
+  const userResult = await db.prepare(
     'SELECT userId, expiresAt FROM refresh_tokens WHERE token = ?'
   )
     .bind(token)
     .first<{ userId: number; expiresAt: string }>()
 
-  if (!result) {
-    return null
+  if (userResult) {
+    if (new Date(userResult.expiresAt) < new Date()) {
+      await db.prepare('DELETE FROM refresh_tokens WHERE token = ?').bind(token).run()
+      return null
+    }
+    const user = await db.prepare('SELECT username, role FROM users WHERE id = ?')
+      .bind(userResult.userId)
+      .first<{ username: string; role: string | null }>()
+    if (!user) return null
+    return { userId: userResult.userId, username: user.username, role: user.role }
   }
 
-  // Проверяем срок действия
-  if (new Date(result.expiresAt) < new Date()) {
-    // Удаляем истекший токен
-    await db.prepare('DELETE FROM refresh_tokens WHERE token = ?').bind(token).run()
+  // Проверяем таблицу преподавателей
+  const teacherResult = await db.prepare(
+    'SELECT teacherId, expiresAt FROM teacher_refresh_tokens WHERE token = ?'
+  )
+    .bind(token)
+    .first<{ teacherId: number; expiresAt: string }>()
+
+  if (!teacherResult) return null
+  if (new Date(teacherResult.expiresAt) < new Date()) {
+    await db.prepare('DELETE FROM teacher_refresh_tokens WHERE token = ?').bind(token).run()
     return null
   }
-
-  // Получаем username
-  const user = await db.prepare('SELECT username FROM users WHERE id = ?')
-    .bind(result.userId)
+  const teacher = await db.prepare('SELECT username FROM teachers WHERE id = ?')
+    .bind(teacherResult.teacherId)
     .first<{ username: string }>()
-
-  if (!user) {
-    return null
+  if (!teacher) return null
+  return {
+    userId: teacherResult.teacherId,
+    username: teacher.username,
+    role: 'teacher',
   }
-
-  return { userId: result.userId, username: user.username }
 }
 
-// Удаление refresh токена
+// Удаление refresh токена (из обеих таблиц)
 export async function deleteRefreshToken(db: D1Database, token: string): Promise<void> {
   await db.prepare('DELETE FROM refresh_tokens WHERE token = ?').bind(token).run()
+  await db.prepare('DELETE FROM teacher_refresh_tokens WHERE token = ?').bind(token).run()
 }
 
-// Получение пользователя по username
+// Получение пользователя по username (таблица users — админ и др.)
 export async function getUserByUsername(
   db: D1Database,
   username: string
+): Promise<{ id: number; username: string; passwordHash: string; role: string | null } | null> {
+  return db.prepare('SELECT id, username, passwordHash, role FROM users WHERE username = ?')
+    .bind(username)
+    .first<{ id: number; username: string; passwordHash: string; role: string | null }>()
+}
+
+// Получение преподавателя по username (таблица teachers)
+export async function getTeacherByUsername(
+  db: D1Database,
+  username: string
 ): Promise<{ id: number; username: string; passwordHash: string } | null> {
-  return db.prepare('SELECT id, username, passwordHash FROM users WHERE username = ?')
+  return db.prepare('SELECT id, username, passwordHash FROM teachers WHERE username = ?')
     .bind(username)
     .first<{ id: number; username: string; passwordHash: string }>()
 }

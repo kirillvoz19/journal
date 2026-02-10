@@ -5,6 +5,8 @@ export interface Teacher {
   username: string
   fullName: string
   createdAt?: string
+  /** Present only for admin: plaintext password for viewing/sharing */
+  password?: string
 }
 
 export interface UpdateTeacherRequest {

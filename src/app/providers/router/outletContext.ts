@@ -2,5 +2,7 @@ import type { AuthenticatedFetch } from '../../../features/groups/model/attendan
 
 export interface AppOutletContext {
   authenticatedFetch: AuthenticatedFetch
+  isAdmin: boolean
+  isTeacher: boolean
 }
 

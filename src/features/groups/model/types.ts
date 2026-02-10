@@ -20,7 +20,7 @@ export interface GroupStudent {
 export interface Group {
   id?: number
   name: string
-  teacherId: number
+  teacherId: number | null
   teacherFullName?: string
   subject: string
   customSubject?: string

@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   username TEXT NOT NULL UNIQUE,
   passwordHash TEXT NOT NULL,
+  role TEXT,
   createdAt TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -31,11 +32,25 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
 CREATE INDEX IF NOT EXISTS idx_refresh_token ON refresh_tokens(token);
 CREATE INDEX IF NOT EXISTS idx_refresh_user ON refresh_tokens(userId);
 
--- Teachers table
+-- Refresh tokens for teachers (login via teachers.username/passwordHash)
+CREATE TABLE IF NOT EXISTS teacher_refresh_tokens (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  teacherId INTEGER NOT NULL,
+  token TEXT NOT NULL UNIQUE,
+  expiresAt TEXT NOT NULL,
+  createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (teacherId) REFERENCES teachers(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_teacher_refresh_token ON teacher_refresh_tokens(token);
+CREATE INDEX IF NOT EXISTS idx_teacher_refresh_teacher ON teacher_refresh_tokens(teacherId);
+
+-- Teachers table (passwordPlaintext: for admin to view/share, only returned to role=admin)
 CREATE TABLE IF NOT EXISTS teachers (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   username TEXT NOT NULL UNIQUE,
   passwordHash TEXT NOT NULL,
+  passwordPlaintext TEXT,
   fullName TEXT NOT NULL,
   createdAt TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -43,16 +58,16 @@ CREATE TABLE IF NOT EXISTS teachers (
 CREATE INDEX IF NOT EXISTS idx_teachers_username ON teachers(username);
 CREATE INDEX IF NOT EXISTS idx_teachers_fullname ON teachers(fullName);
 
--- Groups table
+-- Groups table (teacherId nullable: при удалении преподавателя группа остаётся, препод показывается пустым)
 CREATE TABLE IF NOT EXISTS groups (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
-  teacherId INTEGER NOT NULL,
+  teacherId INTEGER,
   subject TEXT NOT NULL,
   customSubject TEXT,
   level TEXT NOT NULL,
   createdAt TEXT NOT NULL DEFAULT (datetime('now')),
-  FOREIGN KEY (teacherId) REFERENCES teachers(id) ON DELETE CASCADE
+  FOREIGN KEY (teacherId) REFERENCES teachers(id) ON DELETE SET NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_groups_teacher ON groups(teacherId);

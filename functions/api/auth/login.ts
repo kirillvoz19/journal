@@ -4,7 +4,9 @@ import {
   createAccessToken,
   createRefreshToken,
   saveRefreshToken,
+  saveTeacherRefreshToken,
   getUserByUsername,
+  getTeacherByUsername,
 } from '../../utils/auth'
 
 interface Env {
@@ -39,48 +41,57 @@ export const onRequestPost: PagesFunction<Env> = async (context): Promise<Respon
       )
     }
 
-    // Получаем пользователя из БД
+    // Сначала пробуем пользователя (users — админ)
     const user = await getUserByUsername(env.DB, body.username)
 
-    if (!user) {
+    if (user) {
+      const isValidPassword = await verifyPassword(body.password, user.passwordHash)
+      if (!isValidPassword) {
+        return new Response(
+          JSON.stringify({ error: 'Invalid credentials' }),
+          { status: 401, headers: { 'Content-Type': 'application/json' } }
+        )
+      }
+      const jwtSecret = env.JWT_SECRET
+      const accessToken = await createAccessToken(user.id, user.username, jwtSecret, user.role)
+      const refreshToken = await createRefreshToken(user.id, user.username, jwtSecret, user.role)
+      await saveRefreshToken(env.DB, user.id, refreshToken)
       return new Response(
-        JSON.stringify({ error: 'Invalid credentials' }),
-        {
-          status: 401,
-          headers: { 'Content-Type': 'application/json' },
-        }
+        JSON.stringify({
+          accessToken,
+          refreshToken,
+          user: { id: user.id, username: user.username, role: user.role ?? undefined },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
       )
     }
 
-    // Проверяем пароль
-    const isValidPassword = await verifyPassword(body.password, user.passwordHash)
-
-    if (!isValidPassword) {
+    // Пробуем преподавателя (teachers)
+    const teacher = await getTeacherByUsername(env.DB, body.username)
+    if (!teacher) {
       return new Response(
         JSON.stringify({ error: 'Invalid credentials' }),
-        {
-          status: 401,
-          headers: { 'Content-Type': 'application/json' },
-        }
+        { status: 401, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+    const isValidTeacherPassword = await verifyPassword(body.password, teacher.passwordHash)
+    if (!isValidTeacherPassword) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid credentials' }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } }
       )
     }
 
-    // Создаем токены
     const jwtSecret = env.JWT_SECRET
-    const accessToken = await createAccessToken(user.id, user.username, jwtSecret)
-    const refreshToken = await createRefreshToken(user.id, user.username, jwtSecret)
-
-    // Сохраняем refresh токен в БД
-    await saveRefreshToken(env.DB, user.id, refreshToken)
+    const accessToken = await createAccessToken(teacher.id, teacher.username, jwtSecret, 'teacher')
+    const refreshToken = await createRefreshToken(teacher.id, teacher.username, jwtSecret, 'teacher')
+    await saveTeacherRefreshToken(env.DB, teacher.id, refreshToken)
 
     return new Response(
       JSON.stringify({
         accessToken,
         refreshToken,
-        user: {
-          id: user.id,
-          username: user.username,
-        },
+        user: { id: teacher.id, username: teacher.username, role: 'teacher' },
       }),
       {
         status: 200,

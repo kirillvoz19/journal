@@ -13,7 +13,7 @@ import {
 import { ThemeProvider, createTheme } from '@mui/material/styles'
 import CssBaseline from '@mui/material/CssBaseline'
 import { BelarusianText } from './components/BelarusianText'
-import { getJwtExpiryMs } from './shared/lib/auth/jwt'
+import { getJwtExpiryMs, getJwtPayload } from './shared/lib/auth/jwt'
 import {
   clearTokensFromStorage,
   readAccessTokenFromStorage,
@@ -59,6 +59,11 @@ function App() {
 
   const refreshTimerRef = useRef<number | null>(null)
   const refreshInFlightRef = useRef<Promise<boolean> | null>(null)
+
+  const jwtPayload = accessToken ? getJwtPayload(accessToken) : null
+  const isAdmin = !!accessToken && jwtPayload?.role === 'admin'
+  const isTeacher = !!accessToken && jwtPayload?.role === 'teacher'
+  const authUsername = jwtPayload?.username ?? ''
 
   const TOKEN_REFRESH_EARLY_MS = 2 * 60 * 1000
   const MIN_REFRESH_RETRY_DELAY_MS = 1000
@@ -389,7 +394,13 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <AppRouter authenticatedFetch={authenticatedFetch} onLogout={handleLogout} />
+      <AppRouter
+        authenticatedFetch={authenticatedFetch}
+        onLogout={handleLogout}
+        isAdmin={isAdmin}
+        isTeacher={isTeacher}
+        username={authUsername}
+      />
     </ThemeProvider>
   )
 }

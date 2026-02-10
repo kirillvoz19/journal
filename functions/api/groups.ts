@@ -9,7 +9,7 @@ interface Env {
 interface Group {
   id?: number
   name: string
-  teacherId: number
+  teacherId: number | null
   subject: string
   customSubject?: string
   level: string
@@ -57,6 +57,7 @@ interface GroupStudent {
 // @ts-expect-error requireAuth wraps handler types for PagesFunction
 export const onRequestGet: PagesFunction<Env> = requireAuth(async (context) => {
   const { env } = context
+  const user = (context as any).user as { id: number; username: string; role?: string }
 
   try {
     if (!env.DB) {
@@ -69,10 +70,18 @@ export const onRequestGet: PagesFunction<Env> = requireAuth(async (context) => {
       )
     }
 
-    // Get all groups with schedules and students
-    const groupsResult = await env.DB.prepare(
-      'SELECT id, name, teacherId, subject, customSubject, level, createdAt FROM groups ORDER BY id'
-    ).all()
+    // Для преподавателя — только его группы
+    const isTeacher = user?.role === 'teacher'
+    const groupsResult = isTeacher
+      ? await env.DB.prepare(
+          'SELECT id, name, teacherId, subject, customSubject, level, createdAt FROM groups WHERE teacherId = ? ORDER BY id'
+        )
+        .bind(user.id)
+        .all()
+      : await env.DB.prepare(
+          'SELECT id, name, teacherId, subject, customSubject, level, createdAt FROM groups ORDER BY id'
+        )
+        .all()
 
     const groups = (groupsResult.results || []) as Group[]
 
@@ -115,6 +124,7 @@ export const onRequestGet: PagesFunction<Env> = requireAuth(async (context) => {
 // @ts-expect-error requireAuth wraps handler types for PagesFunction
 export const onRequestPost: PagesFunction<Env> = requireAuth(async (context) => {
   const { env, request } = context
+  const user = (context as any).user as { id: number; username: string; role?: string }
 
   try {
     if (!env.DB) {
@@ -129,7 +139,7 @@ export const onRequestPost: PagesFunction<Env> = requireAuth(async (context) => 
 
     const body = (await request.json()) as {
       name: string
-      teacherId: number
+      teacherId?: number | null
       subject: string
       customSubject?: string
       level: string
@@ -137,9 +147,14 @@ export const onRequestPost: PagesFunction<Env> = requireAuth(async (context) => 
       students?: GroupStudent[]
     }
 
-    if (!body.name || !body.teacherId || !body.subject || !body.level) {
+    // Преподаватель может создавать группы только за себя
+    if (user?.role === 'teacher') {
+      body.teacherId = user.id
+    }
+
+    if (!body.name || !body.subject || !body.level) {
       return new Response(
-        JSON.stringify({ error: 'Name, teacherId, subject and level are required' }),
+        JSON.stringify({ error: 'Name, subject and level are required' }),
         {
           status: 400,
           headers: { 'Content-Type': 'application/json' },
@@ -147,13 +162,13 @@ export const onRequestPost: PagesFunction<Env> = requireAuth(async (context) => 
       )
     }
 
-    // Insert group
+    // Insert group (teacherId опционально — группа может быть без преподавателя)
     const groupResult = await env.DB.prepare(
       'INSERT INTO groups (name, teacherId, subject, customSubject, level, createdAt) VALUES (?, ?, ?, ?, ?, ?)'
     )
       .bind(
         body.name,
-        body.teacherId,
+        body.teacherId ?? null,
         body.subject,
         body.customSubject || null,
         body.level,
@@ -243,6 +258,7 @@ export const onRequestPost: PagesFunction<Env> = requireAuth(async (context) => 
 // @ts-expect-error requireAuth wraps handler types for PagesFunction
 export const onRequestPut: PagesFunction<Env> = requireAuth(async (context) => {
   const { env, request } = context
+  const user = (context as any).user as { id: number; username: string; role?: string }
 
   try {
     if (!env.DB) {
@@ -258,7 +274,7 @@ export const onRequestPut: PagesFunction<Env> = requireAuth(async (context) => {
     const body = (await request.json()) as {
       id: number
       name?: string
-      teacherId?: number
+      teacherId?: number | null
       subject?: string
       customSubject?: string
       level?: string
@@ -276,6 +292,20 @@ export const onRequestPut: PagesFunction<Env> = requireAuth(async (context) => {
       )
     }
 
+    // Преподаватель может редактировать только свои группы
+    if (user?.role === 'teacher') {
+      const existing = await env.DB.prepare('SELECT teacherId FROM groups WHERE id = ?')
+        .bind(body.id)
+        .first<{ teacherId: number | null }>()
+      if (!existing || existing.teacherId !== user.id) {
+        return new Response(
+          JSON.stringify({ error: 'Forbidden' }),
+          { status: 403, headers: { 'Content-Type': 'application/json' } }
+        )
+      }
+      body.teacherId = user.id
+    }
+
     const updates: string[] = []
     const values: Array<string | number | null> = []
 
@@ -283,7 +313,7 @@ export const onRequestPut: PagesFunction<Env> = requireAuth(async (context) => {
       updates.push('name = ?')
       values.push(body.name)
     }
-    if (body.teacherId) {
+    if (body.teacherId !== undefined) {
       updates.push('teacherId = ?')
       values.push(body.teacherId)
     }
@@ -414,6 +444,7 @@ export const onRequestPut: PagesFunction<Env> = requireAuth(async (context) => {
 // @ts-expect-error requireAuth wraps handler types for PagesFunction
 export const onRequestDelete: PagesFunction<Env> = requireAuth(async (context) => {
   const { env, request } = context
+  const user = (context as any).user as { id: number; username: string; role?: string }
 
   try {
     if (!env.DB) {
@@ -439,8 +470,23 @@ export const onRequestDelete: PagesFunction<Env> = requireAuth(async (context) =
       )
     }
 
+    const groupId = parseInt(id)
+
+    // Преподаватель может удалять только свои группы
+    if (user?.role === 'teacher') {
+      const existing = await env.DB.prepare('SELECT teacherId FROM groups WHERE id = ?')
+        .bind(groupId)
+        .first<{ teacherId: number | null }>()
+      if (!existing || existing.teacherId !== user.id) {
+        return new Response(
+          JSON.stringify({ error: 'Forbidden' }),
+          { status: 403, headers: { 'Content-Type': 'application/json' } }
+        )
+      }
+    }
+
     const result = await env.DB.prepare('DELETE FROM groups WHERE id = ?')
-      .bind(parseInt(id))
+      .bind(groupId)
       .run()
 
     if (result.meta.changes === 0) {

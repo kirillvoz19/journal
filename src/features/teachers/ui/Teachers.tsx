@@ -42,6 +42,7 @@ import { DialogTitleWithClose } from '../../../shared/ui/dialog-title-with-close
 
 interface TeachersProps {
   authenticatedFetch: (url: string, options?: RequestInit) => Promise<Response>
+  isAdmin: boolean
 }
 
 type SortField = 'fullName' | 'username'
@@ -57,7 +58,7 @@ const generatePassword = (): string => {
   return password
 }
 
-export const Teachers: React.FC<TeachersProps> = ({ authenticatedFetch }) => {
+export const Teachers: React.FC<TeachersProps> = ({ authenticatedFetch, isAdmin }) => {
   const [teachers, setTeachers] = useState<Teacher[]>([])
   const [loading, setLoading] = useState(false)
   const [openAddDialog, setOpenAddDialog] = useState(false)
@@ -271,7 +272,11 @@ export const Teachers: React.FC<TeachersProps> = ({ authenticatedFetch }) => {
     setEditingTeacher(teacher)
     setEditFullName(teacher.fullName)
 
-    const savedPassword = getTeacherPassword(teacherPasswords, teacher.id) || ''
+    // Для админа пароль приходит с API; иначе из localStorage
+    const savedPassword =
+      teacher.password ??
+      getTeacherPassword(teacherPasswords, teacher.id) ??
+      ''
     setEditPassword(savedPassword)
     setInitialEditPassword(savedPassword)
 
@@ -543,11 +548,6 @@ export const Teachers: React.FC<TeachersProps> = ({ authenticatedFetch }) => {
                 value={editPassword}
                 onChange={(e) => setEditPassword(e.target.value)}
                 fullWidth
-                helperText={
-                  editPassword.trim().length > 0
-                    ? 'Пароль захоўваецца ў гэтым браўзеры і будзе бачны пасля перазагрузкі'
-                    : 'Пароль пакуль не захаваны ў гэтым браўзеры — увядзіце яго, каб ён заўсёды адлюстроўваўся'
-                }
               />
             </Tooltip>
             <Tooltip title="ФИО" arrow>

@@ -1,5 +1,7 @@
 export type JwtPayloadWithExp = {
   exp: number
+  role?: string
+  username?: string
 }
 
 const decodeBase64UrlToString = (base64Url: string): string => {
@@ -20,6 +22,20 @@ export const getJwtExpiryMs = (jwt: string): number | null => {
     const payload = JSON.parse(payloadJson) as JwtPayloadWithExp
     if (typeof payload.exp !== 'number' || !Number.isFinite(payload.exp)) return null
     return payload.exp * 1000
+  } catch {
+    return null
+  }
+}
+
+/** Декодирует payload JWT (без проверки подписи). Используется для чтения role на клиенте. */
+export const getJwtPayload = (jwt: string): JwtPayloadWithExp | null => {
+  const parts = jwt.split('.')
+  if (parts.length !== 3) return null
+  const payloadPart = parts[1]
+  if (!payloadPart) return null
+  try {
+    const payloadJson = decodeBase64UrlToString(payloadPart)
+    return JSON.parse(payloadJson) as JwtPayloadWithExp
   } catch {
     return null
   }

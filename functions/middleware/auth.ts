@@ -41,6 +41,7 @@ export function requireAuth(handler: PagesFunction<Env>): PagesFunction<Env> {
     ;(context as any).user = {
       id: payload.userId,
       username: payload.username,
+      role: payload.role,
     }
 
     return handler(context)

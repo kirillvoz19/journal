@@ -4,6 +4,7 @@ import {
   createAccessToken,
   createRefreshToken,
   saveRefreshToken,
+  saveTeacherRefreshToken,
   deleteRefreshToken,
   extractToken,
 } from '../../utils/auth'
@@ -54,16 +55,17 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       )
     }
 
-    // Удаляем старый refresh токен
     await deleteRefreshToken(env.DB, refreshToken)
 
-    // Создаем новые токены
     const jwtSecret = env.JWT_SECRET
-    const accessToken = await createAccessToken(userData.userId, userData.username, jwtSecret)
-    const newRefreshToken = await createRefreshToken(userData.userId, userData.username, jwtSecret)
+    const accessToken = await createAccessToken(userData.userId, userData.username, jwtSecret, userData.role)
+    const newRefreshToken = await createRefreshToken(userData.userId, userData.username, jwtSecret, userData.role)
 
-    // Сохраняем новый refresh токен
-    await saveRefreshToken(env.DB, userData.userId, newRefreshToken)
+    if (userData.role === 'teacher') {
+      await saveTeacherRefreshToken(env.DB, userData.userId, newRefreshToken)
+    } else {
+      await saveRefreshToken(env.DB, userData.userId, newRefreshToken)
+    }
 
     return new Response(
       JSON.stringify({
@@ -72,6 +74,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
         user: {
           id: userData.userId,
           username: userData.username,
+          role: userData.role ?? undefined,
         },
       }),
       {
