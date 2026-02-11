@@ -5,7 +5,7 @@ export interface Teacher {
   username: string
   fullName: string
   createdAt?: string
-  /** Present only for admin: plaintext password for viewing/sharing */
+  /** Только в ответе POST при создании (чтобы показать сгенерированный пароль); в БД не хранится */
   password?: string
 }
 

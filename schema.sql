@@ -45,12 +45,12 @@ CREATE TABLE IF NOT EXISTS teacher_refresh_tokens (
 CREATE INDEX IF NOT EXISTS idx_teacher_refresh_token ON teacher_refresh_tokens(token);
 CREATE INDEX IF NOT EXISTS idx_teacher_refresh_teacher ON teacher_refresh_tokens(teacherId);
 
--- Teachers table (passwordPlaintext: for admin to view/share, only returned to role=admin)
+-- Teachers table (passwordHash — PBKDF2 для входа; passwordEncrypted — AES-GCM для показа админу при редактировании, ключ из JWT_SECRET)
 CREATE TABLE IF NOT EXISTS teachers (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   username TEXT NOT NULL UNIQUE,
   passwordHash TEXT NOT NULL,
-  passwordPlaintext TEXT,
+  passwordEncrypted TEXT,
   fullName TEXT NOT NULL,
   createdAt TEXT NOT NULL DEFAULT (datetime('now'))
 );

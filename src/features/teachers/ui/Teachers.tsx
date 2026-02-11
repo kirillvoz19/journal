@@ -42,7 +42,7 @@ import { DialogTitleWithClose } from '../../../shared/ui/dialog-title-with-close
 
 interface TeachersProps {
   authenticatedFetch: (url: string, options?: RequestInit) => Promise<Response>
-  isAdmin: boolean
+  isAdmin?: boolean
 }
 
 type SortField = 'fullName' | 'username'
@@ -79,10 +79,11 @@ export const Teachers: React.FC<TeachersProps> = ({ authenticatedFetch, isAdmin 
   const [newPassword, setNewPassword] = useState('')
   const [newFullName, setNewFullName] = useState('')
 
-  // Форма редактирования
+  // Форма редактирования: для админа пароль подгружается с бэка (расшифровка), иначе из кэша (только что созданный)
   const [editPassword, setEditPassword] = useState('')
   const [initialEditPassword, setInitialEditPassword] = useState('')
   const [editFullName, setEditFullName] = useState('')
+  const [editPasswordLoading, setEditPasswordLoading] = useState(false)
 
   // Тостеры
   const [snackbar, setSnackbar] = useState<{
@@ -271,17 +272,34 @@ export const Teachers: React.FC<TeachersProps> = ({ authenticatedFetch, isAdmin 
   const handleOpenEditDialog = (teacher: Teacher) => {
     setEditingTeacher(teacher)
     setEditFullName(teacher.fullName)
-
-    // Для админа пароль приходит с API; иначе из localStorage
-    const savedPassword =
-      teacher.password ??
-      getTeacherPassword(teacherPasswords, teacher.id) ??
-      ''
-    setEditPassword(savedPassword)
-    setInitialEditPassword(savedPassword)
-
+    const fromCache = getTeacherPassword(teacherPasswords, teacher.id)
+    setEditPassword(fromCache ?? '')
+    setInitialEditPassword(fromCache ?? '')
     setOpenEditDialog(true)
   }
+
+  // Для админа при открытии редактирования запрашиваем расшифрованный пароль с бэка (работает на любом устройстве)
+  useEffect(() => {
+    if (!openEditDialog || !editingTeacher || !isAdmin) return
+    const tid = editingTeacher.id
+    let cancelled = false
+    setEditPasswordLoading(true)
+    authenticatedFetch(`/api/teachers/${tid}/password`)
+      .then((res) => (res.ok ? (res.json() as Promise<{ password?: string }>) : null))
+      .then((data) => {
+        if (cancelled || !data) return
+        const p = data.password ?? ''
+        setEditPassword(p)
+        setInitialEditPassword(p)
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setEditPasswordLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [openEditDialog, editingTeacher?.id, isAdmin, authenticatedFetch])
 
   const handleCloseEditDialog = () => {
     setOpenEditDialog(false)
@@ -290,6 +308,11 @@ export const Teachers: React.FC<TeachersProps> = ({ authenticatedFetch, isAdmin 
     setInitialEditPassword('')
     setEditFullName('')
   }
+
+  const editFormHasChanges = editingTeacher
+    ? editFullName.trim() !== editingTeacher.fullName ||
+      (editPassword.trim().length > 0 && editPassword.trim() !== initialEditPassword)
+    : false
 
   const toggleSortOrder = () => {
     setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'))
@@ -541,13 +564,16 @@ export const Teachers: React.FC<TeachersProps> = ({ authenticatedFetch, isAdmin 
                 }}
               />
             </Tooltip>
-            <Tooltip title="Пароль" arrow>
+            <Tooltip title="Пароль преподавателя (для админа подгружается с сервера)" arrow>
               <TextField
                 label="Пароль"
                 type="text"
                 value={editPassword}
                 onChange={(e) => setEditPassword(e.target.value)}
                 fullWidth
+                disabled={editPasswordLoading}
+                helperText={editPasswordLoading ? 'Загрузка пароля…' : undefined}
+                placeholder="Пусто — не менять"
               />
             </Tooltip>
             <Tooltip title="ФИО" arrow>
@@ -568,7 +594,7 @@ export const Teachers: React.FC<TeachersProps> = ({ authenticatedFetch, isAdmin 
           <Button
             onClick={handleEditTeacher}
             variant="contained"
-            disabled={!editFullName.trim()}
+            disabled={!editFullName.trim() || !editFormHasChanges}
           >
             <BelarusianText belarusian="Захаваць" russian="Сохранить" />
           </Button>

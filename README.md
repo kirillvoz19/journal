@@ -66,7 +66,13 @@ npx wrangler d1 execute journal-db2 --local --command="INSERT OR IGNORE INTO use
 npx wrangler d1 execute journal-db2 --remote --file=./schema.sql
 ```
 
-### 5. Локальная разработка
+### 5. Переменные окружения (секреты)
+
+Для продакшна задайте в Cloudflare Dashboard → Pages → проект → Settings → Environment variables:
+
+- **JWT_SECRET** — секрет для JWT (доступ и refresh токены); от него же выводится ключ шифрования паролей преподавателей.
+
+### 6. Локальная разработка
 
 Для разработки нужно запустить и фронтенд, и бэкенд. Есть два способа:
 
@@ -177,6 +183,5 @@ journal/
 - [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/)
 
 доп задачи
-надо сделать чтобы еще заходило от преподов, но им доступно было только аккардион с группами
-сделать список своих действий с возможностью роллбекнуть его. или 
 переписать на suppabase чтобы можно было зайти без vpn
+перенести данные из старого сайта на новый
