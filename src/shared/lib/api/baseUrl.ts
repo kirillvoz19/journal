@@ -30,3 +30,16 @@ export function getApiUrl(path: string): string {
   if (p.startsWith('api/backup')) return `${base}/backup`
   return path
 }
+
+/** Заголовки для запросов к Supabase Edge Functions: шлюз требует Authorization: Bearer anon_key. */
+export function getSupabaseRequestHeaders(accessToken?: string): Record<string, string> {
+  const anon = import.meta.env.VITE_SUPABASE_ANON_KEY
+  if (!anon || anon === 'placeholder') return {}
+  const headers: Record<string, string> = { Authorization: `Bearer ${anon}` }
+  if (accessToken) headers['X-Access-Token'] = accessToken
+  return headers
+}
+
+export function isSupabaseBackend(): boolean {
+  return !!getApiBaseUrl()
+}

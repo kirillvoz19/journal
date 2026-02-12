@@ -21,7 +21,7 @@ import {
   writeTokensToStorage,
   type AuthTokens,
 } from './shared/lib/auth/tokens'
-import { getApiUrl } from './shared/lib/api/baseUrl'
+import { getApiUrl, getSupabaseRequestHeaders, isSupabaseBackend } from './shared/lib/api/baseUrl'
 import { AppRouter } from './app/providers/router/AppRouter'
 
 const theme = createTheme({
@@ -153,6 +153,7 @@ function App() {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            ...getSupabaseRequestHeaders(),
           },
           body: JSON.stringify({ refreshToken: storedRefreshToken }),
         })
@@ -208,6 +209,7 @@ function App() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...getSupabaseRequestHeaders(),
         },
         body: JSON.stringify({ username, password }),
       })
@@ -257,7 +259,7 @@ function App() {
       ...options,
       headers: {
         ...options.headers,
-        Authorization: `Bearer ${token}`,
+        ...(isSupabaseBackend() ? getSupabaseRequestHeaders(token) : { Authorization: `Bearer ${token}` }),
       },
     })
 
@@ -278,7 +280,7 @@ function App() {
         ...options,
         headers: {
           ...options.headers,
-          Authorization: `Bearer ${newToken}`,
+          ...(isSupabaseBackend() ? getSupabaseRequestHeaders(newToken) : { Authorization: `Bearer ${newToken}` }),
         },
       })
 

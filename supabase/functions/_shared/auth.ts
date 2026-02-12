@@ -1,4 +1,5 @@
 // JWT + password helpers for Edge Functions (Deno). DB operations use Supabase client.
+declare const Deno: { env: { get(key: string): string | undefined } }
 
 const ACCESS_TOKEN_EXPIRY_MS = 15 * 60 * 1000
 const REFRESH_TOKEN_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000
@@ -159,28 +160,39 @@ export async function createRefreshToken(
 }
 
 export function extractToken(request: Request): string | null {
+  const xToken = request.headers.get('X-Access-Token')
+  if (xToken) return xToken
   const authHeader = request.headers.get('Authorization')
   if (!authHeader?.startsWith('Bearer ')) return null
   return authHeader.slice(7)
 }
 
-// DB helpers using Supabase client (service role)
-type SupabaseClient = ReturnType<typeof import('npm:@supabase/supabase-js@2').createClient>
+// DB helpers using Supabase client (service role).
+// Typed loosely so the IDE doesn't need to resolve Deno's npm: specifier.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type SupabaseClient = any
 
 export async function getUserByUsername(
   supabase: SupabaseClient,
   username: string
 ): Promise<{ id: number; username: string; passwordHash: string; role: string | null } | null> {
-  const { data } = await supabase.from('users').select('id, username, passwordHash, role').eq('username', username).maybeSingle()
-  return data as { id: number; username: string; passwordHash: string; role: string | null } | null
+  const { data, error } = await supabase.from('users').select('id, username, passwordHash, role').eq('username', username).maybeSingle()
+  if (error || !data) return null
+  // PostgREST может вернуть колонки в нижнем регистре (passwordhash)
+  const passwordHash = (data as Record<string, unknown>).passwordHash ?? (data as Record<string, unknown>).passwordhash
+  if (typeof passwordHash !== 'string') return null
+  return { id: data.id, username: data.username, passwordHash, role: data.role ?? null }
 }
 
 export async function getTeacherByUsername(
   supabase: SupabaseClient,
   username: string
 ): Promise<{ id: number; username: string; passwordHash: string } | null> {
-  const { data } = await supabase.from('teachers').select('id, username, passwordHash').eq('username', username).maybeSingle()
-  return data as { id: number; username: string; passwordHash: string } | null
+  const { data, error } = await supabase.from('teachers').select('id, username, passwordHash').eq('username', username).maybeSingle()
+  if (error || !data) return null
+  const passwordHash = (data as Record<string, unknown>).passwordHash ?? (data as Record<string, unknown>).passwordhash
+  if (typeof passwordHash !== 'string') return null
+  return { id: data.id, username: data.username, passwordHash }
 }
 
 const REFRESH_TOKEN_EXPIRY_ISO = new Date(Date.now() + REFRESH_TOKEN_EXPIRY_MS).toISOString()
