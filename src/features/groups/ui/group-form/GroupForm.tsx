@@ -3,6 +3,7 @@ import {
   Alert,
   Box,
   Button,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -124,6 +125,9 @@ export const GroupForm = (props: GroupFormProps) => {
   const [monthToDelete, setMonthToDelete] = useState<{ year: number; monthIndex0: number } | null>(
     null
   )
+
+  const [openDeleteStudentConfirm, setOpenDeleteStudentConfirm] = useState(false)
+  const [studentToDeleteIndex, setStudentToDeleteIndex] = useState<number | null>(null)
 
   const [snackbar, setSnackbar] = useState(getInitialSnackbarState)
 
@@ -403,9 +407,19 @@ export const GroupForm = (props: GroupFormProps) => {
     setOpenStudentDialog(false)
   }
 
-  const handleDeleteStudent = (index: number) => {
-    const student = students[index]
-    if (!student) return
+  const handleDeleteStudentClick = (index: number) => {
+    setStudentToDeleteIndex(index)
+    setOpenDeleteStudentConfirm(true)
+  }
+
+  const handleConfirmDeleteStudent = () => {
+    if (studentToDeleteIndex === null) return
+    const student = students[studentToDeleteIndex]
+    if (!student) {
+      setOpenDeleteStudentConfirm(false)
+      setStudentToDeleteIndex(null)
+      return
+    }
 
     const removed = removeAttendanceForStudent({
       schedules,
@@ -415,7 +429,9 @@ export const GroupForm = (props: GroupFormProps) => {
     })
     setAttendanceMap(removed.attendanceMap)
     setUnsetAttendanceKeys(removed.unsetAttendanceKeys)
-    setStudents((prev) => prev.filter((_, i) => i !== index))
+    setStudents((prev) => prev.filter((_, i) => i !== studentToDeleteIndex))
+    setOpenDeleteStudentConfirm(false)
+    setStudentToDeleteIndex(null)
   }
 
   const handleSaveLesson = (payload: LessonDialogSavePayload) => {
@@ -607,24 +623,49 @@ export const GroupForm = (props: GroupFormProps) => {
   }
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
-          <Typography variant="h5" component="h2">
-            {title}
-          </Typography>
-          <Box sx={{ display: 'flex', gap: 1 }}>
-            <Button variant="outlined" onClick={handleCancel}>
-              <BelarusianText belarusian="Назад" russian="Назад" />
-            </Button>
-            <Button
-              variant="contained"
-              onClick={handleSubmit}
-              disabled={!isFormValid() || loading || Boolean(loadError)}
-            >
-              <BelarusianText belarusian="Захаваць" russian="Сохранить" />
-            </Button>
-          </Box>
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        minHeight: '100vh',
+        gap: 0,
+        position: 'relative',
+      }}
+    >
+      {loading && (
+        <Box
+          sx={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(255, 255, 255, 0.7)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1300,
+          }}
+          aria-busy="true"
+          aria-live="polite"
+          role="status"
+        >
+          <CircularProgress size={48} aria-label="Загрузка" />
         </Box>
+      )}
+
+      <Box
+        sx={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 2,
+          pb: 2,
+        }}
+      >
+        <Typography variant="h5" component="h2">
+          {title}
+        </Typography>
 
         {loadError && (
           <Alert severity="error" sx={{ whiteSpace: 'pre-line' }}>
@@ -714,7 +755,7 @@ export const GroupForm = (props: GroupFormProps) => {
             disabled={loading}
             onAddStudent={handleAddStudent}
             onEditStudent={handleEditStudent}
-            onDeleteStudent={handleDeleteStudent}
+            onDeleteStudent={handleDeleteStudentClick}
           />
 
           {/* Графік */}
@@ -727,6 +768,69 @@ export const GroupForm = (props: GroupFormProps) => {
             onDeleteMonth={handleOpenDeleteMonth}
           />
         </Box>
+      </Box>
+
+      <Box
+        component="footer"
+        sx={{
+          position: 'sticky',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          display: 'flex',
+          gap: 1,
+          justifyContent: 'flex-end',
+          alignItems: 'center',
+          py: 2,
+          px: 0,
+          backgroundColor: 'background.paper',
+          borderTop: 1,
+          borderColor: 'divider',
+          zIndex: 10,
+        }}
+      >
+        <Button
+          variant="outlined"
+          onClick={handleCancel}
+          disabled={loading}
+          aria-label="Назад"
+          sx={{
+            color: '#388e3c',
+            borderColor: '#388e3c',
+            '&:hover': {
+              borderColor: '#2e7d32',
+              color: '#2e7d32',
+              backgroundColor: '#28a745',
+            },
+            '&:disabled': {
+              borderColor: 'action.disabled',
+              color: 'action.disabled',
+            },
+          }}
+        >
+          <BelarusianText belarusian="Назад" russian="Назад" />
+        </Button>
+        <Button
+          variant="contained"
+          onClick={handleSubmit}
+          disabled={!isFormValid() || loading || Boolean(loadError)}
+          aria-label="Захаваць"
+          sx={{
+            backgroundColor: '#388e3c',
+            color: '#fff',
+            '&:hover': {
+              backgroundColor: '#2e7d32',
+              color: '#fff',
+            },
+            '&:disabled': {
+              backgroundColor: 'action.disabledBackground',
+              color: 'action.disabled',
+            },
+          }}
+        >
+          <BelarusianText belarusian="Захаваць" russian="Сохранить" />
+        </Button>
+      </Box>
 
         <LessonDialog
           open={openLessonDialog}
@@ -833,6 +937,39 @@ export const GroupForm = (props: GroupFormProps) => {
             ) : (
               ''
             )
+          }
+          confirmText={<BelarusianText belarusian="Выдаліць" russian="Удалить" />}
+          cancelText={<BelarusianText belarusian="Адмена" russian="Отмена" />}
+          confirmColor="error"
+        />
+
+        {/* Подтверждение удаления студента */}
+        <ConfirmDialog
+          open={openDeleteStudentConfirm}
+          onClose={() => {
+            setOpenDeleteStudentConfirm(false)
+            setStudentToDeleteIndex(null)
+          }}
+          onConfirm={handleConfirmDeleteStudent}
+          title={
+            <BelarusianText belarusian="Выдаліць студэнта?" russian="Удалить студента?" />
+          }
+          message={
+            studentToDeleteIndex !== null && students[studentToDeleteIndex]
+              ? (() => {
+                  const name = students[studentToDeleteIndex]?.fullName ?? ''
+                  return (
+                    <>
+                      <BelarusianText
+                        belarusian="Вы сапраўды хочаце выдаліць студэнта?"
+                        russian="Вы действительно хотите удалить студента?"
+                      />
+                      {'\n\n'}
+                      {name}
+                    </>
+                  )
+                })()
+              : ''
           }
           confirmText={<BelarusianText belarusian="Выдаліць" russian="Удалить" />}
           cancelText={<BelarusianText belarusian="Адмена" russian="Отмена" />}

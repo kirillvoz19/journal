@@ -250,9 +250,6 @@ export const ScheduleCalendar = (props: ScheduleCalendarProps) => {
                   {Array.from(yearMap.entries()).map(([monthIndex0, monthSchedules]) => {
                     const label = getMonthLabel({ year, monthIndex0 })
                     const monthCells = buildMonthGrid({ year, monthIndex0 })
-                    const monthTitle = (
-                      <BelarusianText belarusian={label.belarusian} russian={label.russian} />
-                    )
 
                     const monthKey = `${year}-${monthIndex0}`
                     const monthStart = dayjs(new Date(year, monthIndex0, 1)).format('YYYY-MM')
@@ -283,7 +280,11 @@ export const ScheduleCalendar = (props: ScheduleCalendarProps) => {
                             borderBottomColor: 'divider',
                           }}
                         >
-                          <Typography variant="subtitle2">{monthTitle}</Typography>
+                          <Tooltip title={label.russian} arrow placement="top">
+                            <Typography variant="subtitle2" component="span">
+                              {label.belarusian}
+                            </Typography>
+                          </Tooltip>
                           <Tooltip title={`Выдаліць месяц (${monthStart})`}>
                             <IconButton
                               aria-label={`Выдаліць месяц ${label.russian}`}

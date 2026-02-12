@@ -564,18 +564,16 @@ export const Teachers: React.FC<TeachersProps> = ({ authenticatedFetch, isAdmin 
                 }}
               />
             </Tooltip>
-            <Tooltip title="Пароль преподавателя (для админа подгружается с сервера)" arrow>
-              <TextField
-                label="Пароль"
-                type="text"
-                value={editPassword}
-                onChange={(e) => setEditPassword(e.target.value)}
-                fullWidth
-                disabled={editPasswordLoading}
-                helperText={editPasswordLoading ? 'Загрузка пароля…' : undefined}
-                placeholder="Пусто — не менять"
-              />
-            </Tooltip>
+            <TextField
+              label="Пароль"
+              type="text"
+              value={editPassword}
+              onChange={(e) => setEditPassword(e.target.value)}
+              fullWidth
+              disabled={editPasswordLoading}
+              helperText={editPasswordLoading ? 'Загрузка пароля…' : undefined}
+              placeholder="Пусто — не менять"
+            />
             <Tooltip title="ФИО" arrow>
               <TextField
                 label="ПІБ"

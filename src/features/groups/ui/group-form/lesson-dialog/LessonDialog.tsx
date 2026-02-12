@@ -75,6 +75,18 @@ const buildDefaultStatuses = (students: GroupStudent[]): Record<string, Attendan
   return record
 }
 
+const getAttendanceStatusBackgroundColor = (status: AttendanceEditStatus): string => {
+  switch (status) {
+    case 'present':
+      return 'rgba(76, 175, 80, 0.15)'
+    case 'absent':
+      return 'rgba(244, 67, 54, 0.15)'
+    case 'unset':
+    default:
+      return 'rgba(255, 152, 0, 0.2)'
+  }
+}
+
 export const LessonDialog = (props: LessonDialogProps) => {
   const { open, disabled = false, mode, students, initialValues, onClose, onSave } = props
 
@@ -248,6 +260,9 @@ export const LessonDialog = (props: LessonDialogProps) => {
                             handleChangeStatus(keyPart, e.target.value as AttendanceEditStatus)
                           }
                           disabled={disabled}
+                          sx={{
+                            backgroundColor: getAttendanceStatusBackgroundColor(value),
+                          }}
                         >
                           <MenuItem value="unset">
                             <BelarusianText belarusian="Не ўсталявана" russian="Не установлено" />
