@@ -77,7 +77,7 @@ npx wrangler d1 execute journal-db2 --remote --file=./schema.sql
 1. **Фронт (переменные):**
    - Скопируйте `.env.example` в `.env` и заполните:
      - **VITE_SUPABASE_URL** — Project URL из Supabase Dashboard → Settings → API
-     - **VITE_SUPABASE_ANON_KEY** — Publishable key или Anon (public) key из того же раздела
+     - **VITE_SUPABASE_ANON_KEY** — обязательно **Anon key (Legacy)** в формате JWT (строка начинается с `eyJ...`). Не использовать Publishable key — шлюз Edge Functions вернёт 401 Invalid JWT.
    - Для сборки на GitHub: в репозитории Settings → Secrets and variables → Actions создайте:
      - **SUPABASE_URL** — тот же URL
      - **SUPABASE_ANON_KEY** — тот же ключ
