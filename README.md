@@ -68,9 +68,18 @@ npx wrangler d1 execute journal-db2 --remote --file=./schema.sql
 
 ### 5. Переменные окружения (секреты)
 
-Для продакшна задайте в Cloudflare Dashboard → Pages → проект → Settings → Environment variables:
+Для продакшна задайте в Cloudflare Dashboard → Pages → проект → Settings → Environment variables → New repository secret:
 
 - **JWT_SECRET** — секрет для JWT (доступ и refresh токены); от него же выводится ключ шифрования паролей преподавателей.
+
+#### Supabase (для деплоя на GitHub Pages + Supabase)
+
+- Скопируйте `.env.example` в `.env` и заполните:
+  - **VITE_SUPABASE_URL** — Project URL из Supabase Dashboard → Settings → API
+  - **VITE_SUPABASE_ANON_KEY** — Publishable key или Anon (public) key из того же раздела
+- Для сборки на GitHub: в репозитории Settings → Secrets and variables → Actions создайте:
+  - **SUPABASE_URL** — тот же URL
+  - **SUPABASE_ANON_KEY** — тот же ключ
 
 ### 6. Локальная разработка
 
