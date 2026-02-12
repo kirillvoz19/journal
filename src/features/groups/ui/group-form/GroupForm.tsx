@@ -646,11 +646,11 @@ export const GroupForm = (props: GroupFormProps) => {
             <InputLabel id="teacher-select-label">Выкладчык</InputLabel>
             <Select
               labelId="teacher-select-label"
-              value={selectedTeacherId}
+              value={selectedTeacherId === '' ? '' : String(selectedTeacherId)}
               label="Выкладчык"
               onChange={(e) =>
                 setSelectedTeacherId(
-                  e.target.value === '' ? '' : (e.target.value as number)
+                  e.target.value === '' ? '' : Number(e.target.value)
                 )
               }
             >
@@ -658,7 +658,7 @@ export const GroupForm = (props: GroupFormProps) => {
                 <em>Не паказана</em>
               </MenuItem>
               {teachers.map((teacher) => (
-                <MenuItem key={teacher.id} value={teacher.id}>
+                <MenuItem key={teacher.id} value={String(teacher.id)}>
                   {teacher.username} {teacher.fullName}
                 </MenuItem>
               ))}
