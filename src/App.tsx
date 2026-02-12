@@ -21,6 +21,7 @@ import {
   writeTokensToStorage,
   type AuthTokens,
 } from './shared/lib/auth/tokens'
+import { getApiUrl } from './shared/lib/api/baseUrl'
 import { AppRouter } from './app/providers/router/AppRouter'
 
 const theme = createTheme({
@@ -148,7 +149,7 @@ function App() {
 
     const runRefresh = async (): Promise<boolean> => {
       try {
-        const response = await fetch('/api/auth/refresh', {
+        const response = await fetch(getApiUrl('/api/auth/refresh'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -203,7 +204,7 @@ function App() {
     setLoginLoading(true)
 
     try {
-      const response = await fetch('/api/auth/login', {
+      const response = await fetch(getApiUrl('/api/auth/login'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -240,9 +241,10 @@ function App() {
     url: string,
     options: RequestInit = {}
   ) => {
+    const resolvedUrl = getApiUrl(url)
     // Никогда не запускаем refresh из самого refresh-endpoint
-    if (url.includes('/api/auth/refresh')) {
-      return fetch(url, options)
+    if (resolvedUrl.includes('/refresh')) {
+      return fetch(resolvedUrl, options)
     }
 
     const token = readAccessTokenFromStorage()
@@ -251,7 +253,7 @@ function App() {
       throw new Error('Not authenticated')
     }
 
-    const response = await fetch(url, {
+    const response = await fetch(resolvedUrl, {
       ...options,
       headers: {
         ...options.headers,
@@ -272,7 +274,7 @@ function App() {
         throw new Error('Authentication failed')
       }
 
-      const retriedResponse = await fetch(url, {
+      const retriedResponse = await fetch(resolvedUrl, {
         ...options,
         headers: {
           ...options.headers,

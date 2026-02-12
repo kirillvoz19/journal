@@ -74,12 +74,36 @@ npx wrangler d1 execute journal-db2 --remote --file=./schema.sql
 
 #### Supabase (для деплоя на GitHub Pages + Supabase)
 
-- Скопируйте `.env.example` в `.env` и заполните:
-  - **VITE_SUPABASE_URL** — Project URL из Supabase Dashboard → Settings → API
-  - **VITE_SUPABASE_ANON_KEY** — Publishable key или Anon (public) key из того же раздела
-- Для сборки на GitHub: в репозитории Settings → Secrets and variables → Actions создайте:
-  - **SUPABASE_URL** — тот же URL
-  - **SUPABASE_ANON_KEY** — тот же ключ
+1. **Фронт (переменные):**
+   - Скопируйте `.env.example` в `.env` и заполните:
+     - **VITE_SUPABASE_URL** — Project URL из Supabase Dashboard → Settings → API
+     - **VITE_SUPABASE_ANON_KEY** — Publishable key или Anon (public) key из того же раздела
+   - Для сборки на GitHub: в репозитории Settings → Secrets and variables → Actions создайте:
+     - **SUPABASE_URL** — тот же URL
+     - **SUPABASE_ANON_KEY** — тот же ключ
+
+2. **БД:** в Supabase Dashboard → SQL Editor выполните миграцию из `supabase/migrations/20250211120000_initial.sql` (создаёт таблицы).
+
+3. **Секреты Edge Functions:** в Supabase Dashboard → Project Settings → Edge Functions → Secrets добавьте:
+   - **JWT_SECRET** — секрет для JWT и шифрования паролей преподавателей (тот же, что раньше в Cloudflare).
+
+4. **Деплой функций:** установите [Supabase CLI](https://supabase.com/docs/guides/cli), привяжите проект и задеплойте:
+   ```bash
+   npx supabase login
+   npx supabase link --project-ref mukekoqsybvropsmzuhj
+   npx supabase functions deploy login
+   npx supabase functions deploy refresh
+   npx supabase functions deploy teachers
+   npx supabase functions deploy teacher-password
+   npx supabase functions deploy groups
+   npx supabase functions deploy attendance
+   npx supabase functions deploy backup
+   ```
+   Или одной командой: `npx supabase functions deploy`
+
+   npx supabase login
+   npx supabase link --project-ref mukekoqsybvropsmzuhj
+   npx supabase functions deploy
 
 ### 6. Локальная разработка
 
@@ -194,3 +218,5 @@ journal/
 доп задачи
 переписать на suppabase чтобы можно было зайти без vpn
 перенести данные из старого сайта на новый
+
+я выполнил скрипт миграции. но когда зашел в table editor, вижу у таблиц unrestricted "This table can be accessed by anyone via the Data API as RLS is disabled". 

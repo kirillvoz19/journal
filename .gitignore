@@ -33,3 +33,9 @@ dist-ssr
 .wrangler
 wrangler.toml
 scripts/
+
+# Локальный скрипт генерации пароля админа (не коммитить)
+scripts/generate-admin-password.ts
+
+# Supabase CLI: локальное состояние после supabase link (project-ref, pooler-url и т.д.)
+supabase/.temp/
