@@ -140,10 +140,10 @@ export const AuthenticatedLayout = (props: AuthenticatedLayoutProps) => {
       if (result.success) {
         setSnackbar({
           open: true,
-          message: `Адноўлена: ${result.teachersCreated ?? 0} выкладчыкаў, ${result.groupsCreated ?? 0} груп`,
+          message: `Копія паспяхова загружана. Адноўлена: ${result.teachersCreated ?? 0} выкладчыкаў, ${result.groupsCreated ?? 0} груп`,
           severity: 'success',
         })
-        window.location.reload()
+        setTimeout(() => window.location.reload(), 2000)
       }
     } catch (err) {
       setSnackbar({
@@ -185,10 +185,10 @@ export const AuthenticatedLayout = (props: AuthenticatedLayoutProps) => {
               transformOrigin={{ vertical: 'top', horizontal: 'right' }}
             >
               <MenuItem onClick={handleSaveNewBackup}>
-                <BelarusianText belarusian="Захаваць новую" russian="Сохранить новую копию" />
+                <BelarusianText belarusian="Захаваць новую" russian="Сохранить новую копию" placement="left" />
               </MenuItem>
               <MenuItem onClick={handleRestoreOptionClick}>
-                <BelarusianText belarusian="Загрузіць існуючую" russian="Загрузить существующую копию" />
+                <BelarusianText belarusian="Загрузіць існуючую" russian="Загрузить существующую копию" placement="left" />
               </MenuItem>
             </Menu>
             <Button variant="outlined" onClick={onLogout}>
@@ -229,7 +229,11 @@ export const AuthenticatedLayout = (props: AuthenticatedLayoutProps) => {
         onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
-        <Alert severity={snackbar.severity} onClose={() => setSnackbar((s) => ({ ...s, open: false }))}>
+        <Alert
+          severity={snackbar.severity}
+          onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
+          sx={{ '& .MuiAlert-message': { whiteSpace: 'pre-line' } }}
+        >
           {snackbar.message}
         </Alert>
       </Snackbar>

@@ -282,7 +282,10 @@ export const onRequestPost: PagesFunction<Env> = requireAuth(async (context) => 
     console.error('Backup restore error:', err)
     if (err?.message?.includes('UNIQUE constraint')) {
       return new Response(
-        JSON.stringify({ error: 'Username or name already exists (try different backup or date)' }),
+        JSON.stringify({
+          error:
+            'Імя карыстальніка або назва ўжо існуе (паспрабуйце іншую копію або дату)\n\nИмя пользователя или название уже существует (попробуйте другую копию или дату)',
+        }),
         {
           status: 409,
           headers: { 'Content-Type': 'application/json' },
