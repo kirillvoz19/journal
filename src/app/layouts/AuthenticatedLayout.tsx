@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import {
   Box,
   Button,
@@ -10,7 +10,7 @@ import {
   Snackbar,
   Alert,
 } from '@mui/material'
-import { Outlet } from 'react-router-dom'
+import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { BelarusianText } from '../../components/BelarusianText'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import type { AuthenticatedFetch } from '../../features/groups/model/attendance'
@@ -23,12 +23,19 @@ export interface AuthenticatedLayoutProps {
   username: string
 }
 
+const headerTitleSx = {
+  cursor: 'default' as const,
+  color: 'primary.main',
+  fontWeight: 700,
+  letterSpacing: '-0.02em',
+}
+
 function HeaderTitle(props: { isAdmin: boolean; isTeacher: boolean; username: string }) {
   const { isAdmin, isTeacher, username } = props
   if (isAdmin) {
     return (
       <Tooltip title="Журнал администратора" arrow>
-        <Typography variant="h4" component="h1" sx={{ cursor: 'default' }}>
+        <Typography variant="h4" component="h1" sx={headerTitleSx}>
           Журнал адміністратара
         </Typography>
       </Tooltip>
@@ -37,7 +44,7 @@ function HeaderTitle(props: { isAdmin: boolean; isTeacher: boolean; username: st
   if (isTeacher && username) {
     return (
       <Tooltip title={`Журнал для учителя ${username}`} arrow>
-        <Typography variant="h4" component="h1" sx={{ cursor: 'default' }}>
+        <Typography variant="h4" component="h1" sx={headerTitleSx}>
           Журнал для настаўніка {username}
         </Typography>
       </Tooltip>
@@ -45,7 +52,7 @@ function HeaderTitle(props: { isAdmin: boolean; isTeacher: boolean; username: st
   }
   return (
     <Tooltip title="Журнал" arrow>
-      <Typography variant="h4" component="h1" sx={{ cursor: 'default' }}>
+      <Typography variant="h4" component="h1" sx={headerTitleSx}>
         Журнал
       </Typography>
     </Tooltip>
@@ -65,8 +72,14 @@ const RESTORE_WARNING_TEACHER = {
     'Имеющиеся данные не изменятся. Загруженная копия создаст новые группы (с пометкой «восстановлено»), которые вы сможете редактировать или удалить.',
 }
 
+interface LocationStateToast {
+  toast?: { message: string; severity: 'success' | 'error' }
+}
+
 export const AuthenticatedLayout = (props: AuthenticatedLayoutProps) => {
   const { authenticatedFetch, onLogout, isAdmin, isTeacher, username } = props
+  const location = useLocation()
+  const navigate = useNavigate()
   const [backupMenuAnchor, setBackupMenuAnchor] = useState<null | HTMLElement>(null)
   const [restoreConfirmOpen, setRestoreConfirmOpen] = useState(false)
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
@@ -75,6 +88,14 @@ export const AuthenticatedLayout = (props: AuthenticatedLayoutProps) => {
     severity: 'success',
   })
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    const state = location.state as LocationStateToast | null | undefined
+    const toast = state?.toast
+    if (!toast) return
+    setSnackbar({ open: true, message: toast.message, severity: toast.severity })
+    navigate(location.pathname + location.search, { replace: true })
+  }, [location.state, location.pathname, location.search, navigate])
 
   const handleBackupMenuOpen = (e: React.MouseEvent<HTMLElement>) => {
     setBackupMenuAnchor(e.currentTarget)
@@ -158,45 +179,61 @@ export const AuthenticatedLayout = (props: AuthenticatedLayoutProps) => {
     <Box
       sx={{
         minHeight: '100vh',
-        backgroundColor: '#ffffff',
+        backgroundColor: 'background.default',
       }}
     >
-      <Container maxWidth="lg" sx={{ py: 4 }}>
-        <Box
-          sx={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            mb: 3,
-          }}
-        >
-          <HeaderTitle isAdmin={isAdmin} isTeacher={isTeacher} username={username} />
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <BelarusianText belarusian="Кіраванне копіямі" russian="Управление копиями">
-              <Button variant="outlined" onClick={handleBackupMenuOpen} sx={{ cursor: 'pointer' }}>
-                Кіраванне копіямі
+      {/* Шапка: белый фон, тень снизу, скругление снизу */}
+      <Box
+        component="header"
+        sx={{
+          width: '100%',
+          backgroundColor: '#ffffff',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+          borderBottomLeftRadius: '16px',
+          borderBottomRightRadius: '16px',
+          mb: 0,
+        }}
+      >
+        <Container maxWidth="lg">
+          <Box
+            sx={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              py: 2.5,
+              px: { xs: 1, sm: 0 },
+            }}
+          >
+            <HeaderTitle isAdmin={isAdmin} isTeacher={isTeacher} username={username} />
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+              <BelarusianText belarusian="Кіраванне копіямі" russian="Управление копиями">
+                <Button variant="outlined" onClick={handleBackupMenuOpen} sx={{ cursor: 'pointer' }}>
+                  Кіраванне копіямі
+                </Button>
+              </BelarusianText>
+              <Menu
+                anchorEl={backupMenuAnchor}
+                open={Boolean(backupMenuAnchor)}
+                onClose={handleBackupMenuClose}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+              >
+                <MenuItem onClick={handleSaveNewBackup}>
+                  <BelarusianText belarusian="Захаваць новую" russian="Сохранить новую копию" placement="left" />
+                </MenuItem>
+                <MenuItem onClick={handleRestoreOptionClick}>
+                  <BelarusianText belarusian="Загрузіць існуючую" russian="Загрузить существующую копию" placement="left" />
+                </MenuItem>
+              </Menu>
+              <Button variant="outlined" onClick={onLogout}>
+                <BelarusianText belarusian="Выйсці" russian="Выйти" />
               </Button>
-            </BelarusianText>
-            <Menu
-              anchorEl={backupMenuAnchor}
-              open={Boolean(backupMenuAnchor)}
-              onClose={handleBackupMenuClose}
-              anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-              transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-            >
-              <MenuItem onClick={handleSaveNewBackup}>
-                <BelarusianText belarusian="Захаваць новую" russian="Сохранить новую копию" placement="left" />
-              </MenuItem>
-              <MenuItem onClick={handleRestoreOptionClick}>
-                <BelarusianText belarusian="Загрузіць існуючую" russian="Загрузить существующую копию" placement="left" />
-              </MenuItem>
-            </Menu>
-            <Button variant="outlined" onClick={onLogout}>
-              <BelarusianText belarusian="Выйсці" russian="Выйти" />
-            </Button>
+            </Box>
           </Box>
-        </Box>
+        </Container>
+      </Box>
 
+      <Container maxWidth="lg" sx={{ py: 4, px: { xs: 5, sm: 6 } }}>
         <input
           type="file"
           accept=".json,application/json"
@@ -227,7 +264,7 @@ export const AuthenticatedLayout = (props: AuthenticatedLayoutProps) => {
         open={snackbar.open}
         autoHideDuration={6000}
         onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
       >
         <Alert
           severity={snackbar.severity}

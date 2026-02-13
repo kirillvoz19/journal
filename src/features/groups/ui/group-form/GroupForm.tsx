@@ -10,6 +10,7 @@ import {
   FormControl,
   InputLabel,
   MenuItem,
+  Paper,
   Select,
   Snackbar,
   TextField,
@@ -60,12 +61,21 @@ import { getMonthLabel } from '../../lib/journal-calendar/monthLabels'
 
 export type GroupFormMode = 'create' | 'edit'
 
+export interface GroupFormDoneToastPayload {
+  message: string
+  severity: 'success' | 'error'
+}
+
+export interface GroupFormDonePayload {
+  toast: GroupFormDoneToastPayload
+}
+
 export interface GroupFormProps {
   title: ReactNode
   mode: GroupFormMode
   groupId?: number
   authenticatedFetch: AuthenticatedFetch
-  onDone: () => void
+  onDone: (payload?: GroupFormDonePayload) => void
   onCancel: () => void
 }
 
@@ -578,9 +588,13 @@ export const GroupForm = (props: GroupFormProps) => {
           unsetAttendanceKeys,
         })
 
-        showSnackbar('Група паспяхова адрэдагавана', 'success')
         resetForm()
-        onDone()
+        onDone({
+          toast: {
+            message: 'Група паспяхова адрэдагавана',
+            severity: 'success',
+          },
+        })
         return
       }
 
@@ -603,10 +617,13 @@ export const GroupForm = (props: GroupFormProps) => {
         unsetAttendanceKeys,
       })
 
-      showSnackbar('Група паспяхова дададзена', 'success')
-
       resetForm()
-      onDone()
+      onDone({
+        toast: {
+          message: 'Група паспяхова дададзена',
+          severity: 'success',
+        },
+      })
     } catch (error) {
       console.error('Error saving group:', error)
       showSnackbar(
@@ -663,93 +680,114 @@ export const GroupForm = (props: GroupFormProps) => {
           pb: 2,
         }}
       >
-        <Typography variant="h5" component="h2">
-          {title}
-        </Typography>
+        {/* Блок: редактировать группу + инпуты до подзаголовка Студенты */}
+        <Paper
+          elevation={0}
+          sx={{
+            backgroundColor: '#ffffff',
+            borderRadius: '8px',
+            boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
+            p: 2,
+          }}
+        >
+          <Typography variant="h5" component="h2" sx={{ mb: 2 }}>
+            {title}
+          </Typography>
 
-        {loadError && (
-          <Alert severity="error" sx={{ whiteSpace: 'pre-line' }}>
-            {loadError}
-          </Alert>
-        )}
+          {loadError && (
+            <Alert severity="error" sx={{ whiteSpace: 'pre-line', mb: 2 }}>
+              {loadError}
+            </Alert>
+          )}
 
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <TextField
-            label="Назва"
-            value={groupName}
-            onChange={(e) => setGroupName(e.target.value)}
-            fullWidth
-            required
-            disabled={loading}
-          />
-
-          <FormControl fullWidth disabled={loading}>
-            <InputLabel id="teacher-select-label">Выкладчык</InputLabel>
-            <Select
-              labelId="teacher-select-label"
-              value={selectedTeacherId === '' ? '' : String(selectedTeacherId)}
-              label="Выкладчык"
-              onChange={(e) =>
-                setSelectedTeacherId(
-                  e.target.value === '' ? '' : Number(e.target.value)
-                )
-              }
-            >
-              <MenuItem value="">
-                <em>Не паказана</em>
-              </MenuItem>
-              {teachers.map((teacher) => (
-                <MenuItem key={teacher.id} value={String(teacher.id)}>
-                  {teacher.username} {teacher.fullName}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-
-          <FormControl fullWidth required disabled={loading}>
-            <InputLabel id="subject-select-label">Прадмет</InputLabel>
-            <Select
-              labelId="subject-select-label"
-              value={selectedSubject}
-              label="Прадмет"
-              onChange={(e) => setSelectedSubject(e.target.value)}
-            >
-              {GROUP_SUBJECTS.map((subject) => (
-                <MenuItem key={subject} value={subject}>
-                  {subject}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-
-          {selectedSubject === 'Другой язык' && (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             <TextField
-              label="Назва прадмета"
-              value={customSubject}
-              onChange={(e) => setCustomSubject(e.target.value)}
+              label="Назва"
+              value={groupName}
+              onChange={(e) => setGroupName(e.target.value)}
               fullWidth
               required
               disabled={loading}
             />
-          )}
 
-          <FormControl fullWidth required disabled={loading}>
-            <InputLabel id="level-select-label">Узровень</InputLabel>
-            <Select
-              labelId="level-select-label"
-              value={selectedLevel}
-              label="Узровень"
-              onChange={(e) => setSelectedLevel(e.target.value)}
-            >
-              {GROUP_LEVELS.map((level) => (
-                <MenuItem key={level} value={level}>
-                  {level}
+            <FormControl fullWidth disabled={loading}>
+              <InputLabel id="teacher-select-label">Выкладчык</InputLabel>
+              <Select
+                labelId="teacher-select-label"
+                value={selectedTeacherId === '' ? '' : String(selectedTeacherId)}
+                label="Выкладчык"
+                onChange={(e) =>
+                  setSelectedTeacherId(
+                    e.target.value === '' ? '' : Number(e.target.value)
+                  )
+                }
+              >
+                <MenuItem value="">
+                  <em>Не паказана</em>
                 </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+                {teachers.map((teacher) => (
+                  <MenuItem key={teacher.id} value={String(teacher.id)}>
+                    {teacher.username} {teacher.fullName}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
 
-          {/* Студенты */}
+            <FormControl fullWidth required disabled={loading}>
+              <InputLabel id="subject-select-label">Прадмет</InputLabel>
+              <Select
+                labelId="subject-select-label"
+                value={selectedSubject}
+                label="Прадмет"
+                onChange={(e) => setSelectedSubject(e.target.value)}
+              >
+                {GROUP_SUBJECTS.map((subject) => (
+                  <MenuItem key={subject} value={subject}>
+                    {subject}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            {selectedSubject === 'Другой язык' && (
+              <TextField
+                label="Назва прадмета"
+                value={customSubject}
+                onChange={(e) => setCustomSubject(e.target.value)}
+                fullWidth
+                required
+                disabled={loading}
+              />
+            )}
+
+            <FormControl fullWidth required disabled={loading}>
+              <InputLabel id="level-select-label">Узровень</InputLabel>
+              <Select
+                labelId="level-select-label"
+                value={selectedLevel}
+                label="Узровень"
+                onChange={(e) => setSelectedLevel(e.target.value)}
+              >
+                {GROUP_LEVELS.map((level) => (
+                  <MenuItem key={level} value={level}>
+                    {level}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Box>
+        </Paper>
+
+        {/* Блок: Студенты */}
+        <Paper
+          elevation={0}
+          sx={{
+            backgroundColor: '#ffffff',
+            borderRadius: '8px',
+            boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
+            p: 2,
+          }}
+        >
           <StudentsInlineList
             students={students}
             disabled={loading}
@@ -757,9 +795,10 @@ export const GroupForm = (props: GroupFormProps) => {
             onEditStudent={handleEditStudent}
             onDeleteStudent={handleDeleteStudentClick}
           />
+        </Paper>
 
-          {/* Графік */}
-          <ScheduleCalendar
+        {/* Графік: заголовок отдельным блоком, годы в контейнере — внутри ScheduleCalendar */}
+        <ScheduleCalendar
             schedules={schedules}
             disabled={loading}
             onAddLesson={handleOpenAddLessonDialog}
@@ -767,7 +806,6 @@ export const GroupForm = (props: GroupFormProps) => {
             onDeleteLesson={handleDeleteScheduleFromEntity}
             onDeleteMonth={handleOpenDeleteMonth}
           />
-        </Box>
       </Box>
 
       <Box
@@ -777,18 +815,29 @@ export const GroupForm = (props: GroupFormProps) => {
           bottom: 0,
           left: 0,
           right: 0,
-          display: 'flex',
-          gap: 1,
-          justifyContent: 'flex-end',
-          alignItems: 'center',
-          py: 2,
-          px: 0,
+          width: '100vw',
+          marginLeft: 'calc(-50vw + 50%)',
+          marginRight: 'calc(-50vw + 50%)',
           backgroundColor: 'background.paper',
           borderTop: 1,
           borderColor: 'divider',
           zIndex: 10,
         }}
       >
+        <Box
+          sx={{
+            maxWidth: 1300,
+            width: '100%',
+            boxSizing: 'border-box',
+            margin: 'auto',
+            px: { xs: 5, sm: 6 },
+            py: 2,
+            display: 'flex',
+            gap: 1,
+            justifyContent: 'flex-end',
+            alignItems: 'center',
+          }}
+        >
         <Button
           variant="outlined"
           onClick={handleCancel}
@@ -830,6 +879,7 @@ export const GroupForm = (props: GroupFormProps) => {
         >
           <BelarusianText belarusian="Захаваць" russian="Сохранить" />
         </Button>
+        </Box>
       </Box>
 
         <LessonDialog

@@ -19,7 +19,7 @@ export const StudentsInlineList = (props: StudentsInlineListProps) => {
   return (
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-        <Typography variant="subtitle1">
+        <Typography variant="subtitle1" sx={{ fontFamily: '"Oswald", sans-serif', fontSize: '1.25rem' }}>
           <BelarusianText belarusian="Студэнты" russian="Студенты" />
         </Typography>
         <Tooltip title="Дадаць студэнта">
@@ -52,7 +52,7 @@ export const StudentsInlineList = (props: StudentsInlineListProps) => {
                 p: 1,
                 border: '1px solid',
                 borderColor: 'divider',
-                borderRadius: 1,
+                borderRadius: '8px',
                 flex: '1 1 calc(20% - 8px)',
                 minWidth: 220,
               }}

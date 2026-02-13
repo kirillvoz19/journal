@@ -1,14 +1,17 @@
 import { useNavigate } from 'react-router-dom'
 import { BelarusianText } from '../../../../components/BelarusianText'
-import { GroupForm } from '../../../../features/groups/ui/group-form/GroupForm'
+import {
+  GroupForm,
+  type GroupFormDonePayload,
+} from '../../../../features/groups/ui/group-form/GroupForm'
 import { useAppOutletContext } from '../../../../app/providers/router/useAppOutletContext'
 
 export const GroupCreatePage = () => {
   const navigate = useNavigate()
   const { authenticatedFetch } = useAppOutletContext()
 
-  const handleDone = () => {
-    navigate('/')
+  const handleDone = (payload?: GroupFormDonePayload) => {
+    navigate({ pathname: '/', search: 'tab=groups' }, { state: payload?.toast ? { toast: payload.toast } : undefined })
   }
 
   const handleCancel = () => {

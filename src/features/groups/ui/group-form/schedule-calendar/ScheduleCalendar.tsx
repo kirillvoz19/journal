@@ -10,6 +10,7 @@ import {
   Badge,
   Box,
   IconButton,
+  Paper,
   Tooltip,
   Typography,
 } from '@mui/material'
@@ -53,7 +54,7 @@ const renderDayCell = (params: {
   } = params
 
   if (cell.kind === 'empty') {
-    return <Box sx={{ height: 86, borderRadius: 1 }} />
+    return <Box sx={{ height: 86, borderRadius: '8px' }} />
   }
 
   const isoDate = cell.isoDate ?? ''
@@ -73,13 +74,13 @@ const renderDayCell = (params: {
         height: 86,
         border: '1px solid',
         borderColor: 'divider',
-        borderRadius: 1,
+        borderRadius: '8px',
         p: 0.5,
         position: 'relative',
         backgroundColor: schedule ? 'background.paper' : 'grey.50',
       }}
     >
-      <Box sx={{ position: 'absolute', top: 2, left: 2, display: 'flex', gap: 0.25 }}>
+      <Box sx={{ position: 'absolute', top: 7, left: 2, display: 'flex', gap: 0 }}>
         {schedule ? (
           <>
             <IconButton
@@ -87,7 +88,7 @@ const renderDayCell = (params: {
               size="small"
               onClick={() => onEditLesson(schedule)}
               disabled={disabled}
-              sx={{ width: 22, height: 22 }}
+              sx={{ padding: 0 }}
             >
               <EditIcon sx={{ fontSize: 16 }} />
             </IconButton>
@@ -97,7 +98,7 @@ const renderDayCell = (params: {
               onClick={() => onDeleteLesson(schedule)}
               disabled={disabled}
               color="error"
-              sx={{ width: 22, height: 22 }}
+              sx={{ padding: 0 }}
             >
               <DeleteIcon sx={{ fontSize: 16 }} />
             </IconButton>
@@ -140,56 +141,55 @@ const renderDayCell = (params: {
         </Box>
       )}
 
-      <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-        <Box
-          sx={{
-            flexGrow: 1,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 18,
-            fontWeight: 700,
-            pb: trimmedComment.length > 0 ? 0.75 : 0,
-          }}
-        >
-          {dayOfMonth}
-        </Box>
+      <Box
+        sx={{
+          height: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: 18,
+          fontWeight: 700,
+        }}
+      >
+        {dayOfMonth}
+      </Box>
 
-        {trimmedComment.length > 0 && (
-          <Tooltip title={trimmedComment} placement="top" arrow>
-            <Box
-              aria-label="Каментар"
+      {trimmedComment.length > 0 && (
+        <Tooltip title={trimmedComment} placement="top" arrow>
+          <Box
+            aria-label="Каментар"
+            sx={{
+              position: 'absolute',
+              bottom: 2,
+              left: 4,
+              right: 4,
+              px: 0.5,
+              py: 0.25,
+              border: '1px solid',
+              borderColor: 'info.main',
+              borderRadius: '8px',
+              color: 'info.main',
+              backgroundColor: 'background.paper',
+              overflow: 'hidden',
+            }}
+          >
+            <Typography
+              variant="caption"
+              noWrap
               sx={{
+                display: 'block',
                 width: '100%',
-                px: 0.5,
-                py: 0.25,
-                mb: 0.25,
-                border: '1px solid',
-                borderColor: 'info.main',
-                borderRadius: 1,
-                color: 'info.main',
-                backgroundColor: 'transparent',
                 overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                lineHeight: 1.2,
               }}
             >
-              <Typography
-                variant="caption"
-                noWrap
-                sx={{
-                  display: 'block',
-                  width: '100%',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  lineHeight: 1.2,
-                }}
-              >
-                {trimmedComment}
-              </Typography>
-            </Box>
-          </Tooltip>
-        )}
-      </Box>
+              {trimmedComment}
+            </Typography>
+          </Box>
+        </Tooltip>
+      )}
     </Box>
   )
 }
@@ -204,49 +204,103 @@ export const ScheduleCalendar = (props: ScheduleCalendarProps) => {
     onDeleteMonth,
   } = props
 
+  const LIGHT_GREEN_BG = '#e8f5e9'
+
   const grouped = groupSchedulesByYearMonth(schedules)
 
   return (
-    <Box>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-        <Typography variant="subtitle1">
-          <BelarusianText belarusian="Графік" russian="График" />
-        </Typography>
-        <Tooltip title="Дадаць дату/урок">
-          <IconButton
-            aria-label="Дадаць дату/урок"
-            size="small"
-            color="primary"
-            onClick={() => onAddLesson(undefined)}
-            disabled={disabled}
-          >
-            <AddIcon />
-          </IconButton>
-        </Tooltip>
-      </Box>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      {/* Заголовок «График» отдельным блоком */}
+      <Paper
+        elevation={0}
+        sx={{
+          backgroundColor: '#ffffff',
+          borderRadius: '8px',
+          boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
+          px: 2,
+          py: 1.5,
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Typography variant="subtitle1" fontWeight={600} color="primary.dark" sx={{ fontFamily: '"Oswald", sans-serif', fontSize: '1.25rem' }}>
+            <BelarusianText belarusian="Графік" russian="График" />
+          </Typography>
+          <Tooltip title="Дадаць дату/урок">
+            <IconButton
+              aria-label="Дадаць дату/урок"
+              size="small"
+              color="primary"
+              onClick={() => onAddLesson(undefined)}
+              disabled={disabled}
+            >
+              <AddIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
+      </Paper>
 
       {schedules.length === 0 ? (
         <Typography variant="body2" color="text.secondary">
           <BelarusianText belarusian="Графік не дададзены" russian="График не добавлен" />
         </Typography>
       ) : (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        /* Контейнер годов: отдельный белый контейнер на каждый год */
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {Array.from(grouped.entries()).map(([year, yearMap]) => (
-            <Accordion key={year} defaultExpanded disableGutters>
-              <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ px: 1 }}>
-                <Typography variant="subtitle1" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  {year}
-                  <Badge
-                    color="primary"
-                    badgeContent={Array.from(yearMap.values()).reduce((acc, list) => acc + list.length, 0)}
-                    sx={{ '& .MuiBadge-badge': { fontSize: 11 } }}
-                  >
-                    <EventAvailableIcon fontSize="small" />
-                  </Badge>
-                </Typography>
-              </AccordionSummary>
-              <AccordionDetails sx={{ px: 1, pt: 0 }}>
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+            <Paper
+              key={year}
+              elevation={0}
+              sx={{
+                backgroundColor: '#ffffff',
+                borderRadius: '8px',
+                boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
+                overflow: 'hidden',
+              }}
+            >
+              <Accordion
+                defaultExpanded
+                disableGutters
+                sx={{
+                  boxShadow: 'none',
+                  '&:before': { display: 'none' },
+                  overflow: 'hidden',
+                  '&.Mui-expanded': { margin: 0 },
+                  backgroundColor: 'transparent',
+                }}
+              >
+                <AccordionSummary
+                  expandIcon={<ExpandMoreIcon />}
+                  sx={{
+                    px: 1.5,
+                    borderLeft: '4px solid',
+                    borderLeftColor: 'primary.main',
+                    backgroundColor: 'rgba(46, 125, 50, 0.06)',
+                    '&:hover': { backgroundColor: 'rgba(46, 125, 50, 0.1)' },
+                    '& .MuiAccordionSummary-content': { alignItems: 'center', py: 0.5 },
+                  }}
+                >
+                  <Typography variant="subtitle1" fontWeight={600} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    {year}
+                    <Badge
+                      color="primary"
+                      badgeContent={Array.from(yearMap.values()).reduce((acc, list) => acc + list.length, 0)}
+                      sx={{ '& .MuiBadge-badge': { fontSize: 11 } }}
+                    >
+                      <EventAvailableIcon fontSize="small" />
+                    </Badge>
+                  </Typography>
+                </AccordionSummary>
+                <AccordionDetails sx={{ px: 1.5, pt: 1.5, backgroundColor: 'transparent' }}>
+                <Box
+                  sx={{
+                    display: 'grid',
+                    gap: 2,
+                    gridTemplateColumns: {
+                      xs: '1fr',
+                      md: 'repeat(2, 1fr)',
+                    },
+                  }}
+                >
                   {Array.from(yearMap.entries()).map(([monthIndex0, monthSchedules]) => {
                     const label = getMonthLabel({ year, monthIndex0 })
                     const monthCells = buildMonthGrid({ year, monthIndex0 })
@@ -258,12 +312,9 @@ export const ScheduleCalendar = (props: ScheduleCalendarProps) => {
                       <Box
                         key={monthKey}
                         sx={{
-                          flex: '1 1 520px',
-                          minWidth: 320,
-                          border: '1px solid',
-                          borderColor: 'divider',
-                          borderRadius: 2,
-                          backgroundColor: 'background.default',
+                          minWidth: 0,
+                          borderRadius: '8px',
+                          backgroundColor: LIGHT_GREEN_BG,
                           overflow: 'hidden',
                         }}
                       >
@@ -275,9 +326,7 @@ export const ScheduleCalendar = (props: ScheduleCalendarProps) => {
                             gap: 1,
                             px: 1,
                             py: 1,
-                            backgroundColor: 'background.paper',
-                            borderBottom: '1px solid',
-                            borderBottomColor: 'divider',
+                            backgroundColor: LIGHT_GREEN_BG,
                           }}
                         >
                           <Tooltip title={label.russian} arrow placement="top">
@@ -298,7 +347,7 @@ export const ScheduleCalendar = (props: ScheduleCalendarProps) => {
                           </Tooltip>
                         </Box>
 
-                        <Box sx={{ px: 1, py: 1 }}>
+                        <Box sx={{ px: 1, py: 1, backgroundColor: LIGHT_GREEN_BG }}>
                           <Box
                             sx={{
                               display: 'grid',
@@ -343,8 +392,9 @@ export const ScheduleCalendar = (props: ScheduleCalendarProps) => {
                     )
                   })}
                 </Box>
-              </AccordionDetails>
-            </Accordion>
+                </AccordionDetails>
+              </Accordion>
+            </Paper>
           ))}
         </Box>
       )}

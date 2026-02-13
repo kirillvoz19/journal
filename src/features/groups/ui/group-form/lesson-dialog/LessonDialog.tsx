@@ -6,6 +6,7 @@ import {
   Dialog,
   DialogActions,
   DialogContent,
+  Divider,
   FormControl,
   FormControlLabel,
   InputLabel,
@@ -177,6 +178,10 @@ export const LessonDialog = (props: LessonDialogProps) => {
                   fullWidth: true,
                   required: true,
                   onClick: () => setDatePickerOpen(true),
+                  sx: {
+                    '& .MuiOutlinedInput-root': { borderRadius: '8px' },
+                    '& .MuiOutlinedInput-notchedOutline': { borderRadius: '8px' },
+                  },
                 },
               }}
             />
@@ -195,6 +200,10 @@ export const LessonDialog = (props: LessonDialogProps) => {
                   fullWidth: true,
                   required: true,
                   onClick: () => setStartTimePickerOpen(true),
+                  sx: {
+                    '& .MuiOutlinedInput-root': { borderRadius: '8px' },
+                    '& .MuiOutlinedInput-notchedOutline': { borderRadius: '8px' },
+                  },
                 },
               }}
             />
@@ -213,6 +222,10 @@ export const LessonDialog = (props: LessonDialogProps) => {
                   fullWidth: true,
                   required: true,
                   onClick: () => setEndTimePickerOpen(true),
+                  sx: {
+                    '& .MuiOutlinedInput-root': { borderRadius: '8px' },
+                    '& .MuiOutlinedInput-notchedOutline': { borderRadius: '8px' },
+                  },
                 },
               }}
             />
@@ -228,6 +241,8 @@ export const LessonDialog = (props: LessonDialogProps) => {
               }
               label="Пробны урок"
             />
+
+            <Divider sx={{ my: 1 }} />
 
             <Typography variant="subtitle2">
               <BelarusianText belarusian="Студэнты" russian="Студенты" />
@@ -280,6 +295,8 @@ export const LessonDialog = (props: LessonDialogProps) => {
                 })}
               </Box>
             )}
+
+            <Divider sx={{ my: 1 }} />
 
             <Typography variant="subtitle2">
               <BelarusianText belarusian="Каментар" russian="Комментарий" />

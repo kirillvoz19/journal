@@ -60,17 +60,34 @@ export const HomePage = () => {
   }
 
   return (
-    <Box>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       <Accordion
         expanded={expandedTabs.has(TAB_GROUPS)}
         onChange={(_, isExpanded) => toggleTab(TAB_GROUPS, isExpanded)}
+        sx={{
+          backgroundColor: '#ffffff',
+          borderRadius: '8px',
+          boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
+          '&:before': { display: 'none' },
+          overflow: 'hidden',
+          '&.Mui-expanded': { margin: 0 },
+        }}
       >
-        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-          <Typography>
+        <AccordionSummary
+          expandIcon={<ExpandMoreIcon />}
+          sx={{
+            borderLeft: '4px solid',
+            borderLeftColor: 'primary.main',
+            backgroundColor: 'rgba(46, 125, 50, 0.06)',
+            '&:hover': { backgroundColor: 'rgba(46, 125, 50, 0.1)' },
+            '& .MuiAccordionSummary-content': { alignItems: 'center', py: 0.5 },
+          }}
+        >
+          <Typography variant="subtitle1" fontWeight={600} color="primary.dark">
             <BelarusianText belarusian="Групы" russian="Группы" />
           </Typography>
         </AccordionSummary>
-        <AccordionDetails>
+        <AccordionDetails sx={{ backgroundColor: '#ffffff' }}>
           <Groups authenticatedFetch={authenticatedFetch} />
         </AccordionDetails>
       </Accordion>
@@ -78,16 +95,33 @@ export const HomePage = () => {
       <Accordion
         expanded={expandedTabs.has(TAB_TEACHERS)}
         onChange={(_, isExpanded) => toggleTab(TAB_TEACHERS, isExpanded)}
+        sx={{
+          backgroundColor: '#ffffff',
+          borderRadius: '8px',
+          boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
+          '&:before': { display: 'none' },
+          overflow: 'hidden',
+          '&.Mui-expanded': { margin: 0 },
+        }}
       >
-        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-          <Typography>
+        <AccordionSummary
+          expandIcon={<ExpandMoreIcon />}
+          sx={{
+            borderLeft: '4px solid',
+            borderLeftColor: 'primary.main',
+            backgroundColor: 'rgba(46, 125, 50, 0.06)',
+            '&:hover': { backgroundColor: 'rgba(46, 125, 50, 0.1)' },
+            '& .MuiAccordionSummary-content': { alignItems: 'center', py: 0.5 },
+          }}
+        >
+          <Typography variant="subtitle1" fontWeight={600} color="primary.dark">
             <BelarusianText
               belarusian="Выкладчыкі"
               russian="Преподаватели"
             />
           </Typography>
         </AccordionSummary>
-        <AccordionDetails>
+        <AccordionDetails sx={{ backgroundColor: '#ffffff' }}>
           <Teachers authenticatedFetch={authenticatedFetch} isAdmin={isAdmin} />
         </AccordionDetails>
       </Accordion>

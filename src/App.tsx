@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import {
   Box,
+  CircularProgress,
   Container,
   Paper,
   TextField,
@@ -27,13 +28,65 @@ import { AppRouter } from './app/providers/router/AppRouter'
 const theme = createTheme({
   palette: {
     mode: 'light',
+    primary: {
+      main: '#2e7d32',
+      light: '#4caf50',
+      dark: '#1b5e20',
+    },
     background: {
-      default: '#ffffff',
+      default: '#e8f5e9',
+      paper: '#ffffff',
+    },
+  },
+  typography: {
+    fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif',
+    h1: { fontFamily: '"Oswald", sans-serif' },
+    h2: { fontFamily: '"Oswald", sans-serif' },
+    h3: { fontFamily: '"Oswald", sans-serif' },
+    h4: { fontFamily: '"Oswald", sans-serif' },
+    h5: { fontFamily: '"Oswald", sans-serif' },
+    h6: { fontFamily: '"Oswald", sans-serif' },
+  },
+  shape: {
+    borderRadius: 1, // 1 * spacing(8) = 8px (число в theme.shape умножается на spacing)
+  },
+  components: {
+    MuiButton: {
+      styleOverrides: {
+        root: {
+          borderRadius: '8px',
+        },
+      },
+    },
+    MuiOutlinedInput: {
+      styleOverrides: {
+        root: {
+          borderRadius: '8px',
+        },
+        notchedOutline: {
+          borderRadius: '8px',
+        },
+      },
+    },
+    MuiFilledInput: {
+      styleOverrides: {
+        root: {
+          borderRadius: '8px',
+        },
+      },
+    },
+    MuiDialog: {
+      styleOverrides: {
+        paper: {
+          borderRadius: '8px',
+        },
+      },
     },
   },
 })
 
 function App() {
+  const [isAuthChecking, setIsAuthChecking] = useState(true)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [accessToken, setAccessToken] = useState<string | null>(null)
   const [username, setUsername] = useState('')
@@ -77,9 +130,10 @@ function App() {
     if (storedAccessToken && storedRefreshToken) {
       setAccessToken(storedAccessToken)
       setIsAuthenticated(true)
-      // Проверяем валидность токена
+      // Проверяем валидность токена (в фоне)
       void checkTokenAndRefresh(storedAccessToken)
     }
+    setIsAuthChecking(false)
   }, [])
 
   // Настройка автоматического обновления токена
@@ -295,6 +349,34 @@ function App() {
     return response
   }
 
+  // Пока проверяем авторизацию (чтение токенов из storage) — показываем лоудер как на странице группы
+  if (isAuthChecking) {
+    return (
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <Box
+          sx={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(255, 255, 255, 0.7)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1300,
+          }}
+          aria-busy="true"
+          aria-live="polite"
+          role="status"
+        >
+          <CircularProgress size={48} aria-label="Загрузка" />
+        </Box>
+      </ThemeProvider>
+    )
+  }
+
   // Форма логина
   if (!isAuthenticated) {
     return (
@@ -311,12 +393,15 @@ function App() {
         >
           <Container sx={{ width: '400px' }}>
             <Paper
-              elevation={3}
+              elevation={0}
               sx={{
                 p: 4,
                 display: 'flex',
                 flexDirection: 'column',
                 gap: 2,
+                backgroundColor: '#e8f5e9',
+                borderRadius: '16px',
+                boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
               }}
             >
               <Typography variant="h4" component="h1" align="center" gutterBottom>

@@ -2,7 +2,10 @@ import { Alert, Box, Button } from '@mui/material'
 import { useNavigate, useParams } from 'react-router-dom'
 import { BelarusianText } from '../../../../components/BelarusianText'
 import { useAppOutletContext } from '../../../../app/providers/router/useAppOutletContext'
-import { GroupForm } from '../../../../features/groups/ui/group-form/GroupForm'
+import {
+  GroupForm,
+  type GroupFormDonePayload,
+} from '../../../../features/groups/ui/group-form/GroupForm'
 
 const parseGroupId = (value: string | undefined): number | null => {
   if (!value) return null
@@ -16,8 +19,8 @@ export const GroupEditPage = () => {
   const groupId = parseGroupId(params.groupId)
   const { authenticatedFetch } = useAppOutletContext()
 
-  const handleDone = () => {
-    navigate('/')
+  const handleDone = (payload?: GroupFormDonePayload) => {
+    navigate({ pathname: '/', search: 'tab=groups' }, { state: payload?.toast ? { toast: payload.toast } : undefined })
   }
 
   const handleCancel = () => {
