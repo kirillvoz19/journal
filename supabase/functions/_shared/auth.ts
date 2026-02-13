@@ -11,14 +11,22 @@ function getJWTSecret(): string {
   return Deno.env.get('JWT_SECRET') || 'your-secret-key-change-in-production'
 }
 
+/** Base64URL encode: UTF-8 bytes → base64. btoa() only supports Latin1, so we encode to bytes first. */
 function base64UrlEncode(str: string): string {
-  return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
+  const bytes = new TextEncoder().encode(str)
+  let binary = ''
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
 }
 
+/** Base64URL decode: base64 → UTF-8 string. */
 function base64UrlDecode(str: string): string {
   str = str.replace(/-/g, '+').replace(/_/g, '/')
   while (str.length % 4) str += '='
-  return atob(str)
+  const binary = atob(str)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+  return new TextDecoder().decode(bytes)
 }
 
 export async function hashPassword(password: string): Promise<string> {
