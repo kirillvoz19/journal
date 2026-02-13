@@ -8,7 +8,7 @@ import { useAppOutletContext } from '../../../../app/providers/router/useAppOutl
 
 export const GroupCreatePage = () => {
   const navigate = useNavigate()
-  const { authenticatedFetch } = useAppOutletContext()
+  const { authenticatedFetch, isTeacher, currentUsername } = useAppOutletContext()
 
   const handleDone = (payload?: GroupFormDonePayload) => {
     navigate({ pathname: '/', search: 'tab=groups' }, { state: payload?.toast ? { toast: payload.toast } : undefined })
@@ -23,6 +23,8 @@ export const GroupCreatePage = () => {
       title={<BelarusianText belarusian="Дадаць групу" russian="Добавить группу" />}
       mode="create"
       authenticatedFetch={authenticatedFetch}
+      isTeacher={isTeacher}
+      currentUsername={currentUsername}
       onDone={handleDone}
       onCancel={handleCancel}
     />

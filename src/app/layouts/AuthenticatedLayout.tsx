@@ -257,7 +257,7 @@ export const AuthenticatedLayout = (props: AuthenticatedLayoutProps) => {
           confirmColor="primary"
         />
 
-        <Outlet context={{ authenticatedFetch, isAdmin, isTeacher }} />
+        <Outlet context={{ authenticatedFetch, isAdmin, isTeacher, currentUsername: username }} />
       </Container>
 
       <Snackbar

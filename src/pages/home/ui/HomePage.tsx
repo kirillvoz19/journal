@@ -1,6 +1,13 @@
 import { useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Accordion, AccordionDetails, AccordionSummary, Box, Typography } from '@mui/material'
+import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
+  Box,
+  Paper,
+  Typography,
+} from '@mui/material'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import { BelarusianText } from '../../../components/BelarusianText'
 import { Groups } from '../../../components/Groups'
@@ -50,12 +57,20 @@ export const HomePage = () => {
     setTabs(next)
   }
 
-  // Преподаватель: только содержимое групп, без аккордеонов и без вкладки «Преподаватели»
+  // Преподаватель: только содержимое групп в контейнере с белым фоном, тенью и закруглением
   if (isTeacher) {
     return (
-      <Box>
+      <Paper
+        elevation={0}
+        sx={{
+          backgroundColor: '#ffffff',
+          borderRadius: '8px',
+          boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
+          overflow: 'hidden',
+        }}
+      >
         <Groups authenticatedFetch={authenticatedFetch} />
-      </Box>
+      </Paper>
     )
   }
 

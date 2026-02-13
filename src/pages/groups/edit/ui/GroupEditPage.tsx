@@ -17,7 +17,7 @@ export const GroupEditPage = () => {
   const navigate = useNavigate()
   const params = useParams<{ groupId: string }>()
   const groupId = parseGroupId(params.groupId)
-  const { authenticatedFetch } = useAppOutletContext()
+  const { authenticatedFetch, isTeacher, currentUsername } = useAppOutletContext()
 
   const handleDone = (payload?: GroupFormDonePayload) => {
     navigate({ pathname: '/', search: 'tab=groups' }, { state: payload?.toast ? { toast: payload.toast } : undefined })
@@ -51,6 +51,8 @@ export const GroupEditPage = () => {
       mode="edit"
       groupId={groupId}
       authenticatedFetch={authenticatedFetch}
+      isTeacher={isTeacher}
+      currentUsername={currentUsername}
       onDone={handleDone}
       onCancel={handleCancel}
     />

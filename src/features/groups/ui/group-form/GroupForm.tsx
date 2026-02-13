@@ -14,6 +14,7 @@ import {
   Select,
   Snackbar,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import dayjs from 'dayjs'
@@ -75,6 +76,10 @@ export interface GroupFormProps {
   mode: GroupFormMode
   groupId?: number
   authenticatedFetch: AuthenticatedFetch
+  /** Роль «учитель»: в селекторе выкладчыка показывать только текущего пользователя */
+  isTeacher?: boolean
+  /** Логин текущего пользователя (для учителя — совпадает с teacher.username) */
+  currentUsername?: string
   onDone: (payload?: GroupFormDonePayload) => void
   onCancel: () => void
 }
@@ -90,7 +95,8 @@ const getInitialSnackbarState = (): {
 })
 
 export const GroupForm = (props: GroupFormProps) => {
-  const { title, mode, groupId, authenticatedFetch, onDone, onCancel } = props
+  const { title, mode, groupId, authenticatedFetch, isTeacher, currentUsername, onDone, onCancel } =
+    props
 
   const [teachers, setTeachers] = useState<Teacher[]>([])
   const [loading, setLoading] = useState(false)
@@ -184,6 +190,12 @@ export const GroupForm = (props: GroupFormProps) => {
       setTeachers(nextTeachers)
 
       if (mode === 'create') {
+        if (isTeacher && currentUsername) {
+          const currentTeacher = nextTeachers.find((t) => t.username === currentUsername)
+          if (currentTeacher) {
+            setSelectedTeacherId(currentTeacher.id)
+          }
+        }
         return
       }
 
@@ -199,6 +211,13 @@ export const GroupForm = (props: GroupFormProps) => {
       }
 
       fillFormFromGroup(group)
+
+      if (isTeacher && currentUsername) {
+        const currentTeacher = nextTeachers.find((t) => t.username === currentUsername)
+        if (currentTeacher) {
+          setSelectedTeacherId(currentTeacher.id)
+        }
+      }
 
       const loadedMap = await loadAttendanceMapForGroup({
         authenticatedFetch,
@@ -217,6 +236,15 @@ export const GroupForm = (props: GroupFormProps) => {
     void loadInitialData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, groupId])
+
+  /** Для учителя в селекторе показываем только текущего пользователя */
+  const teachersForSelect = useMemo((): Teacher[] => {
+    if (isTeacher && currentUsername) {
+      const current = teachers.find((t) => t.username === currentUsername)
+      return current ? [current] : []
+    }
+    return teachers
+  }, [isTeacher, currentUsername, teachers])
 
   const isFormValid = (): boolean => {
     if (!groupName.trim()) return false
@@ -701,80 +729,92 @@ export const GroupForm = (props: GroupFormProps) => {
           )}
 
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <TextField
-              label="Назва"
-              value={groupName}
-              onChange={(e) => setGroupName(e.target.value)}
-              fullWidth
-              required
-              disabled={loading}
-            />
-
-            <FormControl fullWidth disabled={loading}>
-              <InputLabel id="teacher-select-label">Выкладчык</InputLabel>
-              <Select
-                labelId="teacher-select-label"
-                value={selectedTeacherId === '' ? '' : String(selectedTeacherId)}
-                label="Выкладчык"
-                onChange={(e) =>
-                  setSelectedTeacherId(
-                    e.target.value === '' ? '' : Number(e.target.value)
-                  )
-                }
-              >
-                <MenuItem value="">
-                  <em>Не паказана</em>
-                </MenuItem>
-                {teachers.map((teacher) => (
-                  <MenuItem key={teacher.id} value={String(teacher.id)}>
-                    {teacher.username} {teacher.fullName}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-
-            <FormControl fullWidth required disabled={loading}>
-              <InputLabel id="subject-select-label">Прадмет</InputLabel>
-              <Select
-                labelId="subject-select-label"
-                value={selectedSubject}
-                label="Прадмет"
-                onChange={(e) => setSelectedSubject(e.target.value)}
-              >
-                {GROUP_SUBJECTS.map((subject) => (
-                  <MenuItem key={subject} value={subject}>
-                    {subject}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-
-            {selectedSubject === 'Другой язык' && (
+            <Tooltip title="Название" arrow placement="top-start">
               <TextField
-                label="Назва прадмета"
-                value={customSubject}
-                onChange={(e) => setCustomSubject(e.target.value)}
+                label="Назва"
+                value={groupName}
+                onChange={(e) => setGroupName(e.target.value)}
                 fullWidth
                 required
                 disabled={loading}
               />
+            </Tooltip>
+
+            <Tooltip title="Преподаватель" arrow placement="top-start">
+              <FormControl fullWidth disabled={loading}>
+                <InputLabel id="teacher-select-label">Выкладчык</InputLabel>
+                <Select
+                  labelId="teacher-select-label"
+                  value={selectedTeacherId === '' ? '' : String(selectedTeacherId)}
+                  label="Выкладчык"
+                  onChange={(e) =>
+                    setSelectedTeacherId(
+                      e.target.value === '' ? '' : Number(e.target.value)
+                    )
+                  }
+                >
+                  {!isTeacher && (
+                    <MenuItem value="">
+                      <em>Не паказана</em>
+                    </MenuItem>
+                  )}
+                  {teachersForSelect.map((teacher) => (
+                    <MenuItem key={teacher.id} value={String(teacher.id)}>
+                      {teacher.username} {teacher.fullName}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Tooltip>
+
+            <Tooltip title="Предмет" arrow placement="top-start">
+              <FormControl fullWidth required disabled={loading}>
+                <InputLabel id="subject-select-label">Прадмет</InputLabel>
+                <Select
+                  labelId="subject-select-label"
+                  value={selectedSubject}
+                  label="Прадмет"
+                  onChange={(e) => setSelectedSubject(e.target.value)}
+                >
+                  {GROUP_SUBJECTS.map((subject) => (
+                    <MenuItem key={subject} value={subject}>
+                      {subject}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Tooltip>
+
+            {selectedSubject === 'Другой язык' && (
+              <Tooltip title="Название предмета" arrow placement="top-start">
+                <TextField
+                  label="Назва прадмета"
+                  value={customSubject}
+                  onChange={(e) => setCustomSubject(e.target.value)}
+                  fullWidth
+                  required
+                  disabled={loading}
+                />
+              </Tooltip>
             )}
 
-            <FormControl fullWidth required disabled={loading}>
-              <InputLabel id="level-select-label">Узровень</InputLabel>
-              <Select
-                labelId="level-select-label"
-                value={selectedLevel}
-                label="Узровень"
-                onChange={(e) => setSelectedLevel(e.target.value)}
-              >
-                {GROUP_LEVELS.map((level) => (
-                  <MenuItem key={level} value={level}>
-                    {level}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+            <Tooltip title="Уровень" arrow placement="top-start">
+              <FormControl fullWidth required disabled={loading}>
+                <InputLabel id="level-select-label">Узровень</InputLabel>
+                <Select
+                  labelId="level-select-label"
+                  value={selectedLevel}
+                  label="Узровень"
+                  onChange={(e) => setSelectedLevel(e.target.value)}
+                >
+                  {GROUP_LEVELS.map((level) => (
+                    <MenuItem key={level} value={level}>
+                      {level}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Tooltip>
           </Box>
         </Paper>
 
@@ -902,7 +942,7 @@ export const GroupForm = (props: GroupFormProps) => {
           <DialogTitleWithClose onClose={() => setOpenStudentDialog(false)}>
             <BelarusianText
               belarusian={
-                editingStudentIndex !== null ? 'Рэдагаваць студента' : 'Дадаць студента'
+                editingStudentIndex !== null ? 'Рэдагаваць студэнта' : 'Дадаць студэнта'
               }
               russian={
                 editingStudentIndex !== null
@@ -913,27 +953,33 @@ export const GroupForm = (props: GroupFormProps) => {
           </DialogTitleWithClose>
           <DialogContent>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
-              <TextField
-                label="ПІБ"
-                value={studentFullName}
-                onChange={(e) => setStudentFullName(e.target.value)}
-                fullWidth
-                required
-              />
-              <TextField
-                label="Email"
-                type="email"
-                value={studentEmail}
-                onChange={(e) => setStudentEmail(e.target.value)}
-                fullWidth
-              />
-              <TextField
-                label="Тэлефон"
-                type="tel"
-                value={studentPhone}
-                onChange={(e) => setStudentPhone(e.target.value)}
-                fullWidth
-              />
+              <Tooltip title="ФИО" arrow placement="top-start">
+                <TextField
+                  label="ПІБ"
+                  value={studentFullName}
+                  onChange={(e) => setStudentFullName(e.target.value)}
+                  fullWidth
+                  required
+                />
+              </Tooltip>
+              <Tooltip title="Эл. почта" arrow placement="top-start">
+                <TextField
+                  label="Email"
+                  type="email"
+                  value={studentEmail}
+                  onChange={(e) => setStudentEmail(e.target.value)}
+                  fullWidth
+                />
+              </Tooltip>
+              <Tooltip title="Телефон" arrow placement="top-start">
+                <TextField
+                  label="Тэлефон"
+                  type="tel"
+                  value={studentPhone}
+                  onChange={(e) => setStudentPhone(e.target.value)}
+                  fullWidth
+                />
+              </Tooltip>
             </Box>
           </DialogContent>
           <DialogActions>

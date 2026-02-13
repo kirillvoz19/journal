@@ -48,6 +48,15 @@ interface TeachersProps {
 type SortField = 'fullName' | 'username'
 type SortOrder = 'asc' | 'desc'
 
+const LOGIN_ONLY_LATIN_HELPER_BY =
+  'Лагін можна ствараць толькі лацінскімі літарамі (A–Z, a–z, 0–9).'
+const LOGIN_ONLY_LATIN_HELPER_RU =
+  'Логин можно создавать только латинскими буквами (A–Z, a–z, 0–9).'
+const LOGIN_INVALID_CHAR_TOAST_BY =
+  'Дазволены толькі лацінскія літары, лічбы і знак падкрэслівання.'
+const LOGIN_INVALID_CHAR_TOAST_RU =
+  'Допускаются только латинские буквы, цифры и знак подчёркивания.'
+
 // Генерирует надежный 6-символьный пароль (без похожих символов)
 const generatePassword = (): string => {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789'
@@ -102,6 +111,18 @@ export const Teachers: React.FC<TeachersProps> = ({ authenticatedFetch, isAdmin 
 
   const handleCloseSnackbar = () => {
     setSnackbar((prev) => ({ ...prev, open: false }))
+  }
+
+  const handleNewUsernameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value
+    const filtered = raw.replace(/[^a-zA-Z0-9_]/g, '')
+    if (filtered !== raw) {
+      showSnackbar(
+        `${LOGIN_INVALID_CHAR_TOAST_BY}\n\n${LOGIN_INVALID_CHAR_TOAST_RU}`,
+        'error'
+      )
+    }
+    setNewUsername(filtered)
   }
 
   const handleCloseAddDialog = () => {
@@ -492,13 +513,14 @@ export const Teachers: React.FC<TeachersProps> = ({ authenticatedFetch, isAdmin 
         </DialogTitleWithClose>
         <DialogContent>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
-            <Tooltip title="Логин" arrow>
+            <Tooltip title={LOGIN_ONLY_LATIN_HELPER_RU} arrow>
               <TextField
                 label="Лагін"
                 value={newUsername}
-                onChange={(e) => setNewUsername(e.target.value)}
+                onChange={handleNewUsernameChange}
                 fullWidth
                 required
+                helperText={LOGIN_ONLY_LATIN_HELPER_BY}
               />
             </Tooltip>
             <Tooltip title="Пароль" arrow>
@@ -551,7 +573,7 @@ export const Teachers: React.FC<TeachersProps> = ({ authenticatedFetch, isAdmin 
         </DialogTitleWithClose>
         <DialogContent>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
-            <Tooltip title="Логин" arrow>
+            <Tooltip title={LOGIN_ONLY_LATIN_HELPER_RU} arrow>
               <TextField
                 label="Лагін"
                 value={editingTeacher?.username || ''}
@@ -632,7 +654,10 @@ export const Teachers: React.FC<TeachersProps> = ({ authenticatedFetch, isAdmin 
           onClose={handleCloseSnackbar}
           severity={snackbar.severity}
           variant="filled"
-          sx={{ width: '100%' }}
+          sx={{
+            width: '100%',
+            '& .MuiAlert-message': { whiteSpace: 'pre-line' },
+          }}
         >
           {snackbar.message}
         </Alert>

@@ -222,7 +222,7 @@ export const ScheduleCalendar = (props: ScheduleCalendarProps) => {
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Typography variant="subtitle1" fontWeight={600} color="primary.dark" sx={{ fontFamily: '"Oswald", sans-serif', fontSize: '1.25rem' }}>
+          <Typography variant="subtitle1" sx={{ fontFamily: '"Oswald", sans-serif', fontSize: '1.25rem' }}>
             <BelarusianText belarusian="Графік" russian="График" />
           </Typography>
           <Tooltip title="Дадаць дату/урок">
