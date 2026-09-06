@@ -106,7 +106,10 @@ Deno.serve(async (req) => {
       }
 
       const dateStr = formatRestoreDate(body.savedAt)
-      const suffix = ` (адноўлены ${dateStr})`
+      const groupSuffix = ` (адноўлены ${dateStr})`
+      // Лагін дапускае толькі лаціну, лічбы і падкрэсліванне (a-zA-Z0-9_),
+      // інакше пад адноўленым уліковым запісам немагчыма ўвайсці
+      const usernameSuffix = `_restored_${dateStr.replace(/\./g, '')}`
       const oldToNewTeacher: Record<number, number> = {}
       const oldToNewGroup: Record<number, number> = {}
       const oldToNewSchedule: Record<number, number> = {}
@@ -116,7 +119,7 @@ Deno.serve(async (req) => {
         const { data: inserted, error } = await supabase
           .from('teachers')
           .insert({
-            username: t.username + suffix,
+            username: t.username + usernameSuffix,
             passwordHash: t.passwordHash,
             passwordEncrypted: null,
             fullName: t.fullName,
@@ -139,7 +142,7 @@ Deno.serve(async (req) => {
         const { data: groupRow, error: gErr } = await supabase
           .from('groups')
           .insert({
-            name: g.name + suffix,
+            name: g.name + groupSuffix,
             teacherId: newTeacherId,
             subject: g.subject,
             customSubject: g.customSubject ?? null,

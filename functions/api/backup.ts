@@ -173,7 +173,8 @@ export const onRequestGet: PagesFunction<Env> = requireAuth(async (context) => {
   }
 })
 
-// POST — восстановить из бэкапа (создаём новых преподавателей и группы с суффиксом "адноўлены DD.MM.YYYY")
+// POST — восстановить из бэкапа (создаём новые группы с суффиксом "адноўлены DD.MM.YYYY",
+// преподавателей — с латинским суффиксом _restored_DDMMYYYY, т.к. логин допускает только a-zA-Z0-9_)
 // @ts-expect-error requireAuth wraps handler
 export const onRequestPost: PagesFunction<Env> = requireAuth(async (context) => {
   const { env, request } = context
@@ -203,7 +204,10 @@ export const onRequestPost: PagesFunction<Env> = requireAuth(async (context) => 
   }
 
   const dateStr = formatRestoreDate(body.savedAt)
-  const suffix = ` (адноўлены ${dateStr})`
+  const groupSuffix = ` (адноўлены ${dateStr})`
+  // Логин допускает только латиницу, цифры и подчёркивание (a-zA-Z0-9_),
+  // иначе под восстановленной учеткой невозможно войти
+  const usernameSuffix = `_restored_${dateStr.replace(/\./g, '')}`
   const oldToNewTeacher: Record<number, number> = {}
   const oldToNewGroup: Record<number, number> = {}
   const oldToNewSchedule: Record<number, number> = {}
@@ -214,7 +218,7 @@ export const onRequestPost: PagesFunction<Env> = requireAuth(async (context) => 
       const result = await env.DB.prepare(
         'INSERT INTO teachers (username, passwordHash, passwordEncrypted, fullName, createdAt) VALUES (?, ?, ?, ?, ?)'
       )
-        .bind(t.username + suffix, t.passwordHash, null, t.fullName, new Date().toISOString())
+        .bind(t.username + usernameSuffix, t.passwordHash, null, t.fullName, new Date().toISOString())
         .run()
       const newId = result.meta.last_row_id as number
       oldToNewTeacher[t.id] = newId
@@ -226,7 +230,7 @@ export const onRequestPost: PagesFunction<Env> = requireAuth(async (context) => 
         'INSERT INTO groups (name, teacherId, subject, customSubject, level, createdAt) VALUES (?, ?, ?, ?, ?, ?)'
       )
         .bind(
-          g.name + suffix,
+          g.name + groupSuffix,
           newTeacherId,
           g.subject,
           g.customSubject ?? null,

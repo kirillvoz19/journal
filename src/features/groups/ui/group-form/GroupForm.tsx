@@ -46,6 +46,7 @@ import {
   updateGroup,
 } from '../../api/groupsApi'
 import { StudentsInlineList } from './students-inline-list'
+import { ScheduleStrip } from './schedule-strip'
 import { ScheduleCalendar } from './schedule-calendar'
 import {
   LessonDialog,
@@ -836,6 +837,20 @@ export const GroupForm = (props: GroupFormProps) => {
             onDeleteStudent={handleDeleteStudentClick}
           />
         </Paper>
+
+        {/* Блок: Графік паласой — те же данные, что и у основного графика, только другое отображение */}
+        <ScheduleStrip
+          schedules={schedules}
+          students={students}
+          attendanceMap={attendanceMap}
+          disabled={loading}
+          onAddLesson={handleOpenAddLessonDialog}
+          onAddStudent={handleAddStudent}
+          onEditStudent={handleEditStudent}
+          onDeleteStudent={handleDeleteStudentClick}
+          onEditLesson={handleOpenEditLessonDialog}
+          onDeleteLesson={handleDeleteScheduleFromEntity}
+        />
 
         {/* Графік: заголовок отдельным блоком, годы в контейнере — внутри ScheduleCalendar */}
         <ScheduleCalendar
